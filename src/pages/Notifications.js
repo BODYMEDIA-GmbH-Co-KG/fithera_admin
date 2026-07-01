@@ -16,6 +16,10 @@ export default function Notifications() {
   const [history, setHistory] = useState([]);
   const [mode, setMode] = useState('now'); // 'now' or 'later'
   const [scheduledAt, setScheduledAt] = useState('');
+  const [linkType, setLinkType] = useState('none'); // none | SessionDetail | ExhibitorDetail | Programm | Aussteller | Hallenplan
+  const [linkId, setLinkId] = useState('');
+  const [sessionsList, setSessionsList] = useState([]);
+  const [exhibitorsList, setExhibitorsList] = useState([]);
 
   const loadHistory = async () => {
     if (!event) return;
@@ -24,9 +28,33 @@ export default function Notifications() {
   };
   useEffect(() => { loadHistory(); }, [event]);
 
+  useEffect(() => {
+    if (!event) return;
+    supabase.from('sessions').select('id, title, start_time').eq('event_id', event.id).order('start_time')
+      .then(({ data }) => setSessionsList(data || []));
+    supabase.from('exhibitors').select('id, name').eq('event_id', event.id).order('name')
+      .then(({ data }) => setExhibitorsList(data || []));
+  }, [event]);
+
+  // Turns the picker choice into the two columns the backend uses.
+  const buildLinkFields = () => {
+    if (linkType === 'none') return { link_screen: null, link_id: null };
+    if (linkType === 'SessionDetail' || linkType === 'ExhibitorDetail') {
+      if (!linkId) return null; // needs a specific item
+      return { link_screen: linkType, link_id: linkId };
+    }
+    // Whole-screen targets (no id needed)
+    return { link_screen: linkType, link_id: null };
+  };
+
   const handleSend = async () => {
     if (!title.trim() || !message.trim()) {
       toast.error(de ? 'Titel und Nachricht sind erforderlich' : 'Title and message are required');
+      return;
+    }
+    const linkFields = buildLinkFields();
+    if (linkFields === null) {
+      toast.error(de ? 'Bitte ein Ziel fuer die Verlinkung waehlen' : 'Please choose a link target');
       return;
     }
     // Scheduling validation
@@ -46,10 +74,10 @@ export default function Notifications() {
     if (mode === 'later') {
       // Save with a scheduled time. The cron job will send it. Do NOT invoke now.
       const { error } = await supabase.from('push_notifications')
-        .insert({ event_id: event?.id, title, message, target: 'all', status: 'pending', scheduled_for: new Date(scheduledAt).toISOString() });
+        .insert({ event_id: event?.id, title, message, target: 'all', status: 'pending', scheduled_for: new Date(scheduledAt).toISOString(), ...linkFields });
       if (error) { toast.error(t(lang, 'error')); setSending(false); return; }
       toast.success(de ? 'Geplant' : 'Scheduled');
-      setTitle(''); setMessage(''); setScheduledAt(''); setMode('now');
+      setTitle(''); setMessage(''); setScheduledAt(''); setMode('now'); setLinkType('none'); setLinkId('');
       loadHistory();
       setSending(false);
       return;
@@ -58,7 +86,7 @@ export default function Notifications() {
     // Send now (original behaviour).
     // 1. Save the notification.
     const { data: inserted, error } = await supabase.from('push_notifications')
-      .insert({ event_id: event?.id, title, message, target: 'all', status: 'pending' })
+      .insert({ event_id: event?.id, title, message, target: 'all', status: 'pending', ...linkFields })
       .select()
       .single();
     if (error) { toast.error(t(lang, 'error')); setSending(false); return; }
@@ -73,7 +101,7 @@ export default function Notifications() {
       // Saved but delivery failed (function not deployed yet, etc.)
       toast.error(de ? 'Gespeichert, aber Versand fehlgeschlagen. Edge Function pruefen.' : 'Saved, but delivery failed. Check edge function.');
     }
-    setTitle(''); setMessage('');
+    setTitle(''); setMessage(''); setLinkType('none'); setLinkId('');
     loadHistory();
     setSending(false);
   };
@@ -130,6 +158,47 @@ export default function Notifications() {
           <label style={s.label}>{t(lang, 'message')} *</label>
           <textarea style={s.textarea} value={message} onChange={e => setMessage(e.target.value)} placeholder={de ? 'Deine Nachricht an alle Besucher...' : 'Your message to all attendees...'} />
         </div>
+
+        {/* Deep-link target */}
+        <div style={{ marginBottom: 16 }}>
+          <label style={s.label}>{de ? 'Verlinkung (optional)' : 'Link (optional)'}</label>
+          <select
+            value={linkType}
+            onChange={e => { setLinkType(e.target.value); setLinkId(''); }}
+            style={{ ...s.input, cursor: 'pointer' }}
+          >
+            <option value="none">{de ? 'Keine' : 'None'}</option>
+            <option value="SessionDetail">{de ? 'Bestimmte Session' : 'Specific session'}</option>
+            <option value="ExhibitorDetail">{de ? 'Bestimmter Aussteller' : 'Specific exhibitor'}</option>
+            <option value="Programm">{de ? 'Programm (Liste)' : 'Program (list)'}</option>
+            <option value="Aussteller">{de ? 'Aussteller (Liste)' : 'Exhibitors (list)'}</option>
+            <option value="Hallenplan">{de ? 'Hallenplan' : 'Floor plan'}</option>
+          </select>
+        </div>
+
+        {linkType === 'SessionDetail' && (
+          <div style={{ marginBottom: 16 }}>
+            <label style={s.label}>{de ? 'Session waehlen' : 'Choose session'}</label>
+            <select value={linkId} onChange={e => setLinkId(e.target.value)} style={{ ...s.input, cursor: 'pointer' }}>
+              <option value="">{de ? '-- bitte waehlen --' : '-- please choose --'}</option>
+              {sessionsList.map(se => (
+                <option key={se.id} value={se.id}>{se.title}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {linkType === 'ExhibitorDetail' && (
+          <div style={{ marginBottom: 16 }}>
+            <label style={s.label}>{de ? 'Aussteller waehlen' : 'Choose exhibitor'}</label>
+            <select value={linkId} onChange={e => setLinkId(e.target.value)} style={{ ...s.input, cursor: 'pointer' }}>
+              <option value="">{de ? '-- bitte waehlen --' : '-- please choose --'}</option>
+              {exhibitorsList.map(ex => (
+                <option key={ex.id} value={ex.id}>{ex.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
 
         {/* Send mode: now or later */}
         <div style={{ marginBottom: 16 }}>
