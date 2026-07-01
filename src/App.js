@@ -183,7 +183,7 @@ export default function App() {
     { id: 'speakers', icon: Users, label: lang === 'de' ? 'Referenten' : 'Speakers' },
     { id: 'ads', icon: Megaphone, label: t(lang, 'ads') },
     { id: 'notifications', icon: Bell, label: t(lang, 'notifications') },
-    { id: 'feedback', icon: MessageSquare, label: t(lang, 'feedback') },
+    { id: 'feedback', icon: MessageSquare, label: lang === 'de' ? 'Session Bewertungen' : 'Session Ratings' },
     { id: 'users', icon: Users, label: t(lang, 'users') },
     { id: 'eventfeedback', icon: MessageSquare, label: 'Event Feedback' },
     { id: 'categories', icon: Tag, label: lang === 'de' ? 'Kategorien' : 'Categories' },

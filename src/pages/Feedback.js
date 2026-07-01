@@ -25,7 +25,7 @@ export default function Feedback() {
   return (
     <div style={{ padding: 24 }}>
       <div style={{ marginBottom: 20 }}>
-        <div style={{ color: COLORS.text, fontSize: 22, fontWeight: 700 }}>{t(lang, 'feedback')}</div>
+        <div style={{ color: COLORS.text, fontSize: 22, fontWeight: 700 }}>{lang === 'de' ? 'Session Bewertungen' : 'Session Ratings'}</div>
         <div style={{ color: COLORS.dim, fontSize: 13, marginTop: 4 }}>
           {items.length} {de ? 'Bewertungen' : 'ratings'} · Ø {avg} ⭐
         </div>
