@@ -2,6 +2,7 @@
   "name": "fithera-admin",
   "version": "1.0.0",
   "private": true,
+  "homepage": "https://BODYMEDIA-GmbH-Co-KG.github.io/fithera_admin",
   "dependencies": {
     "@supabase/supabase-js": "^2.39.0",
     "lucide-react": "^0.309.0",
@@ -12,7 +13,9 @@
   },
   "scripts": {
     "start": "react-scripts start",
-    "build": "react-scripts build"
+    "build": "react-scripts build",
+    "predeploy": "npm run build",
+    "deploy": "gh-pages -d build"
   },
   "browserslist": {
     "production": [

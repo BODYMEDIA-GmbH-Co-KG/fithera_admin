@@ -5,7 +5,6 @@ import {
   LayoutDashboard, Store, Calendar, Megaphone, Image,
   Bell, MessageSquare, Users, LogOut, Globe, Smartphone, Tag, BarChart3, Award
 } from 'lucide-react';
-
 import Dashboard from './pages/Dashboard';
 import Exhibitors from './pages/Exhibitors';
 import Program from './pages/Program';
@@ -20,10 +19,8 @@ import Speakers from './pages/Speakers';
 import FloorPlan from './pages/FloorPlan';
 import Statistik from './pages/Statistik';
 import Sponsors from './pages/Sponsors';
-
 export const LangContext = createContext('de');
 export const EventContext = createContext(null);
-
 const COLORS = {
   primary: '#8c368c',
   accent: '#e71f69',
@@ -34,7 +31,6 @@ const COLORS = {
   muted: '#6b6b76',
   dim: '#9a9aa5',
 };
-
 export default function App() {
   const [session, setSession] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -45,15 +41,21 @@ export default function App() {
   const [password, setPassword] = useState('');
   const [loginError, setLoginError] = useState('');
   const [loginLoading, setLoginLoading] = useState(false);
-
+  const [recovery, setRecovery] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
+  const [newPassword2, setNewPassword2] = useState('');
+  const [pwError, setPwError] = useState('');
+  const [pwLoading, setPwLoading] = useState(false);
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setLoading(false);
     });
-    supabase.auth.onAuthStateChange((_e, session) => setSession(session));
+    supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY') setRecovery(true);
+      setSession(session);
+    });
   }, []);
-
   useEffect(() => {
     if (!session) return;
     supabase.from('events').select('*').eq('is_active', true).order('start_date', { ascending: false }).limit(1)
@@ -66,7 +68,6 @@ export default function App() {
         }
       });
   }, [session]);
-
   const handleLogin = async (e) => {
     e.preventDefault();
     setLoginLoading(true);
@@ -75,21 +76,73 @@ export default function App() {
     if (error) setLoginError(lang === 'de' ? 'Falsche E-Mail oder Passwort' : 'Invalid email or password');
     setLoginLoading(false);
   };
-
+  const handleSetPassword = async (e) => {
+    e.preventDefault();
+    setPwError('');
+    if (newPassword.length < 6) {
+      setPwError(lang === 'de' ? 'Passwort muss mindestens 6 Zeichen haben' : 'Password must be at least 6 characters');
+      return;
+    }
+    if (newPassword !== newPassword2) {
+      setPwError(lang === 'de' ? 'Passwoerter stimmen nicht ueberein' : 'Passwords do not match');
+      return;
+    }
+    setPwLoading(true);
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    setPwLoading(false);
+    if (error) {
+      setPwError(lang === 'de' ? 'Fehler beim Speichern des Passworts' : 'Error saving password');
+      return;
+    }
+    setRecovery(false);
+    setNewPassword('');
+    setNewPassword2('');
+  };
   const handleLogout = () => supabase.auth.signOut();
-
   if (loading) return (
     <div style={{ background: COLORS.bg, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <div style={{ color: COLORS.muted }}>Laden...</div>
     </div>
   );
-
+  if (recovery) return (
+    <div style={{ background: COLORS.bg, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'system-ui, sans-serif' }}>
+      <Toaster />
+      <div style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: 16, padding: 40, width: 380 }}>
+        <div style={{ textAlign: 'center', marginBottom: 32 }}>
+          <div style={{ width: 56, height: 56, background: `${COLORS.primary}`, borderRadius: 16, margin: '0 auto 16px', display: 'flex', alignItems: 'center', justifyContent:'center' }}>
+            <span style={{ color: '#fff', fontWeight: 800, fontSize: 20 }}>F</span>
+          </div>
+          <div style={{ color: COLORS.text, fontSize: 22, fontWeight: 700 }}>{lang === 'de' ? 'Neues Passwort' : 'New Password'}</div>
+          <div style={{ color: COLORS.dim, fontSize: 14, marginTop: 4 }}>
+            {lang === 'de' ? 'Bitte neues Passwort festlegen' : 'Please set a new password'}
+          </div>
+        </div>
+        <form onSubmit={handleSetPassword}>
+          <div style={{ marginBottom: 14 }}>
+            <label style={{ display: 'block', color: COLORS.muted, fontSize: 12, fontWeight: 600, marginBottom: 5, textTransform: 'uppercase' }}>{lang === 'de' ? 'Neues Passwort' : 'New Password'}</label>
+            <input value={newPassword} onChange={e => setNewPassword(e.target.value)} type="password" required
+              style={{ width: '100%', background: COLORS.bg, border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: '10px 12px', color: COLORS.text, fontSize: 14, outline: 'none', boxSizing: 'border-box' }} />
+          </div>
+          <div style={{ marginBottom: 20 }}>
+            <label style={{ display: 'block', color: COLORS.muted, fontSize: 12, fontWeight: 600, marginBottom: 5, textTransform: 'uppercase' }}>{lang === 'de' ? 'Passwort bestaetigen' : 'Confirm Password'}</label>
+            <input value={newPassword2} onChange={e => setNewPassword2(e.target.value)} type="password" required
+              style={{ width: '100%', background: COLORS.bg, border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: '10px 12px', color: COLORS.text, fontSize: 14, outline: 'none', boxSizing: 'border-box' }} />
+          </div>
+          {pwError && <div style={{ color: COLORS.accent, fontSize: 13, marginBottom: 14 }}>{pwError}</div>}
+          <button type="submit" disabled={pwLoading}
+            style={{ width: '100%', padding: '11px', background: `${COLORS.primary}`, color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 15 }}>
+            {pwLoading ? '...' : (lang === 'de' ? 'Passwort speichern' : 'Save Password')}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
   if (!session) return (
     <div style={{ background: COLORS.bg, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'system-ui, sans-serif' }}>
       <Toaster />
       <div style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: 16, padding: 40, width: 380 }}>
         <div style={{ textAlign: 'center', marginBottom: 32 }}>
-          <div style={{ width: 56, height: 56, background: `${COLORS.primary}`, borderRadius: 16, margin: '0 auto 16px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ width: 56, height: 56, background: `${COLORS.primary}`, borderRadius: 16, margin: '0 auto 16px', display: 'flex', alignItems: 'center', justifyContent:'center' }}>
             <span style={{ color: '#fff', fontWeight: 800, fontSize: 20 }}>F</span>
           </div>
           <div style={{ color: COLORS.text, fontSize: 22, fontWeight: 700 }}>Fithera Admin</div>
