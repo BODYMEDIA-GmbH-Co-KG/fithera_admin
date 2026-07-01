@@ -8,7 +8,7 @@ export const supabase = createClient(
 const tr = {
   en: {
     dashboard: 'Dashboard', exhibitors: 'Exhibitors', program: 'Program',
-    ads: 'Ads & Banners', social: 'Social Wall', notifications: 'Push Notifications',
+    ads: 'Ads & Banners', notifications: 'Push Notifications',
     feedback: 'Feedback', users: 'Users',
     add: 'Add', edit: 'Edit', delete: 'Delete', save: 'Save', cancel: 'Cancel',
     search: 'Search...', loading: 'Loading...', no_data: 'No data yet.',
@@ -28,7 +28,7 @@ const tr = {
   },
   de: {
     dashboard: 'Dashboard', exhibitors: 'Aussteller', program: 'Programm',
-    ads: 'Anzeigen & Banner', social: 'Social Wall', notifications: 'Push-Benachrichtigungen',
+    ads: 'Anzeigen & Banner', notifications: 'Push-Benachrichtigungen',
     feedback: 'Feedback', users: 'Benutzer',
     add: 'Hinzufügen', edit: 'Bearbeiten', delete: 'Löschen', save: 'Speichern', cancel: 'Abbrechen',
     search: 'Suchen...', loading: 'Laden...', no_data: 'Noch keine Daten.',

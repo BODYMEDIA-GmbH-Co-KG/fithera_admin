@@ -1,0 +1,55 @@
+{
+  "expo": {
+    "name": "fithera",
+    "slug": "fithera-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#6a46b4"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "de.bodymedia.fithera",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSCameraUsageDescription": "fithera nutzt die Kamera, um die QR-Codes von Tickets zu scannen und Kontakte zu knüpfen."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#6a46b4"
+      },
+      "package": "de.bodymedia.fithera",
+      "googleServicesFile": "./google-services.json"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#6a46b4"
+        }
+      ],
+      "expo-font",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "fithera nutzt die Kamera, um die QR-Codes von Tickets zu scannen und Kontakte zu knüpfen."
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "4c7a1bfa-860d-4a56-91b5-c1ece7f71a38"
+      }
+    }
+  }
+}

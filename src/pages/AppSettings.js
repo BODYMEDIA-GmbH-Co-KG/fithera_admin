@@ -25,7 +25,6 @@ const DEFAULT_SETTINGS = {
     { icon: 'calendar-outline', icon_active: 'calendar', label: 'Programm', screen: 'Programm' },
     { icon: 'business-outline', icon_active: 'business', label: 'Aussteller', screen: 'Aussteller' },
     { icon: 'map-outline', icon_active: 'map', label: 'Hallenpl.', screen: 'Hallenplan' },
-    { icon: 'chatbubbles-outline', icon_active: 'chatbubbles', label: 'Social', screen: 'Social' },
     { icon: 'heart-outline', icon_active: 'heart', label: 'Saved', screen: 'Gespeichert' },
   ],
 };

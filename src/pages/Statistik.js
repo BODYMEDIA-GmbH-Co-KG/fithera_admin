@@ -23,7 +23,6 @@ const TYPE_LABELS = {
   speaker_view: 'Referenten-Aufrufe',
   map_open: 'Hallenplan geöffnet',
   map_booth_tap: 'Stand auf Karte getippt',
-  social_wall_view: 'Social Wall geöffnet',
   program_open: 'Programm geöffnet',
   exhibitors_open: 'Ausstellerliste geöffnet',
   program_filter: 'Programm-Filter genutzt',
@@ -36,7 +35,6 @@ const ICONS = {
   speaker_view: Users,
   map_open: Map,
   map_booth_tap: Map,
-  social_wall_view: ImageIcon,
   program_open: Calendar,
   exhibitors_open: Store,
 };

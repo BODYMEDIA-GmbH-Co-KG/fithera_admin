@@ -8,23 +8,22 @@ const COLORS = { primary: '#8c368c', accent: '#e71f69', surface: '#ffffff', bord
 export default function Dashboard() {
   const lang = useContext(LangContext);
   const event = useContext(EventContext);
-  const [stats, setStats] = useState({ exhibitors: 0, sessions: 0, users: 0, feedback: 0, pending_social: 0, active_ads: 0 });
+  const [stats, setStats] = useState({ exhibitors: 0, sessions: 0, users: 0, feedback: 0, active_ads: 0 });
 
   useEffect(() => {
     if (!event) return;
     const load = async () => {
-      const [ex, se, us, fb, so, ads] = await Promise.all([
+      const [ex, se, us, fb, ads] = await Promise.all([
         supabase.from('exhibitors').select('id', { count: 'exact', head: true }).eq('event_id', event.id),
         supabase.from('sessions').select('id', { count: 'exact', head: true }).eq('event_id', event.id),
         supabase.from('user_profiles').select('id', { count: 'exact', head: true }),
         supabase.from('session_feedback').select('id', { count: 'exact', head: true }),
-        supabase.from('social_posts').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
         supabase.from('ads').select('id', { count: 'exact', head: true }).eq('event_id', event.id).eq('is_active', true),
       ]);
       setStats({
         exhibitors: ex.count || 0, sessions: se.count || 0,
         users: us.count || 0, feedback: fb.count || 0,
-        pending_social: so.count || 0, active_ads: ads.count || 0,
+        active_ads: ads.count || 0,
       });
     };
     load();
@@ -35,7 +34,6 @@ export default function Dashboard() {
     { icon: Calendar, label: t(lang, 'total_sessions'), value: stats.sessions, color: '#3b82f6' },
     { icon: Users, label: t(lang, 'total_users'), value: stats.users, color: '#22c55e' },
     { icon: MessageSquare, label: t(lang, 'total_feedback'), value: stats.feedback, color: '#f59e0b' },
-    { icon: Clock, label: lang === 'de' ? 'Social: Ausstehend' : 'Social: Pending', value: stats.pending_social, color: COLORS.accent },
     { icon: Image, label: lang === 'de' ? 'Aktive Anzeigen' : 'Active Ads', value: stats.active_ads, color: '#8b5cf6' },
   ];
 
