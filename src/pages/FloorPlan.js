@@ -25,10 +25,11 @@ const s = {
   planWrap: { position: 'relative', userSelect: 'none', lineHeight: 0, transformOrigin: 'top left' },
   planImg: { display: 'block', background: '#fff' },
   zone: { position: 'absolute', borderStyle: 'solid', borderRadius: 0, cursor: 'move', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', alignItems: 'stretch' },
-  zoneNum: { width: '100%', fontSize: 13, fontWeight: 800, padding: '3px 4px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textAlign: 'center', flexShrink: 0 },
+  zoneNum: { width: '100%', fontWeight: 800, padding: '1px 2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'clip', textAlign: 'center', flexShrink: 0, lineHeight: 1.1, pointerEvents: 'none', boxSizing: 'border-box' },
   zoneBody: { flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 0, padding: 2, overflow: 'hidden' },
   zoneLogo: { maxWidth: '90%', maxHeight: '100%', width: 'auto', height: 'auto', objectFit: 'contain', pointerEvents: 'none', display: 'block' },
   zoneName: { fontSize: 10, color: '#222', fontWeight: 700, textAlign: 'center', padding: '0 4px', pointerEvents: 'none', overflow: 'hidden',lineHeight: 1.1, maxWidth: '95%',display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' },
+  numBadge: { position: 'absolute', top: 0, left: 0, fontWeight: 800, color: '#fff', background: 'rgba(0,0,0,0.55)', borderRadius: 2, padding: '0px 2px', lineHeight: 1.1, whiteSpace: 'nowrap', pointerEvents: 'none', zIndex: 10, fontVariantNumeric: 'tabular-nums', boxSizing: 'border-box' },
   handle: { position: 'absolute', right: -8, bottom: -8, width: 28, height: 28, background: 'transparent', cursor: 'nwse-resize', zIndex: 50, touchAction: 'none' },
   handleHint: { position: 'absolute', right: -4, bottom: -4, width: 8, height: 8, borderRight: `3px solid ${COLORS.primary}`, borderBottom: `3px solid ${COLORS.primary}`, pointerEvents: 'none' },
   zoneDel: { position: 'absolute', top: -8, right: -8, width: 18, height: 18, background: COLORS.accent, color: '#fff', border: 'none', borderRadius: 9, cursor: 'pointer', fontSize: 11, lineHeight: '14px', padding: 0 },
@@ -42,6 +43,11 @@ const s = {
   colorLabel: { color: COLORS.muted, fontSize: 12, fontWeight: 600 },
   swatch: { width: 32, height: 28, padding: 0, border: `1px solid ${COLORS.border}`, borderRadius: 6, background: 'none', cursor: 'pointer' },
   toggleRow: { display: 'flex', alignItems: 'center', gap: 6, color: COLORS.muted, fontSize: 12, fontWeight: 600, cursor: 'pointer' },
+  // Stage colour list inside the colour panel
+  stageColorWrap: { display: 'flex', flexDirection: 'column', gap: 6 },
+  stageColorRow: { display: 'flex', alignItems: 'center', gap: 8 },
+  stageColorName: { color: COLORS.muted, fontSize: 12, maxWidth: 170, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+  stageSwatch: { width: 34, height: 24, padding: 0, border: `1px solid ${COLORS.border}`, borderRadius: 5, background: 'none', cursor: 'pointer', flexShrink: 0 },
   // Popup that appears when you click a booth on the map
   boothPop: { position: 'absolute', zIndex: 60, background: COLORS.surface, border: `1px solid ${COLORS.primary}`, borderRadius: 10, padding:12, width: 280, boxShadow: '0 12px 40px rgba(0,0,0,0.6)' },
   boothPopTitle: { color: COLORS.text, fontSize: 13, fontWeight: 700, marginBottom: 8, display: 'flex', alignItems: 'center', justifyContent:'space-between' },
@@ -73,6 +79,7 @@ export default function FloorPlan() {
   const [colors, setColors] = useState(DEFAULTS);
   const [fillTransparent, setFillTransparent] = useState(false);
   const [showLogos, setShowLogos] = useState(true);
+  const [showNumbers, setShowNumbers] = useState(true);
   const [borderWidth, setBorderWidth] = useState(1.5);
   const [openPicker, setOpenPicker] = useState(null);
   const [zoom, setZoom] = useState(1);
@@ -92,7 +99,7 @@ export default function FloorPlan() {
   const load = async () => {
     if (!event) return;
     const [{ data: ev }, { data: ex }, { data: tr }, { data: bz }] = await Promise.all([
-      supabase.from('events').select('map_url, booth_num_color, booth_badge_color, booth_border_color, booth_fill_color, booth_show_logos, booth_border_width').eq('id', event.id).single(),
+      supabase.from('events').select('map_url, booth_num_color, booth_badge_color, booth_border_color, booth_fill_color, booth_show_logos, booth_show_numbers, booth_border_width').eq('id', event.id).single(),
       supabase.from('exhibitors').select('id, name, booth_number, logo_url').eq('event_id', event.id).order('name'),
       supabase.from('tracks').select('id, name, color').eq('event_id', event.id).order('sort_order'),
       supabase.from('floor_plan_booths').select('*').eq('event_id', event.id),
@@ -111,6 +118,7 @@ export default function FloorPlan() {
       setColors(c);
       setFillTransparent(c.booth_fill_color === 'transparent');
       setShowLogos(ev.booth_show_logos !== false);
+      setShowNumbers(ev.booth_show_numbers !== false);
       setBorderWidth(ev.booth_border_width != null ? Number(ev.booth_border_width) : 1.5);
     }
   };
@@ -123,6 +131,15 @@ export default function FloorPlan() {
     setColors(c => ({ ...c, [key]: value }));
     const { error } = await supabase.from('events').update({ [key]: value }).eq('id', event.id);
     if (error) { console.error('color save error:', error); toast.error(t(lang, 'error')); }
+  };
+
+  // Each stage draws its frame in its own colour, in the admin preview and in
+  // the app. The colour lives on the track, so it is also the stage's colour
+  // on programme badges: changing it here changes it there too.
+  const saveTrackColor = async (trackId, value) => {
+    setTracks(ts => ts.map(x => x.id === trackId ? { ...x, color: value } : x));
+    const { error } = await supabase.from('tracks').update({ color: value }).eq('id', trackId);
+    if (error) { console.error('track colour save error:', error); toast.error(t(lang, 'error')); }
   };
 
   const toggleTransparent = async () => {
@@ -145,6 +162,13 @@ export default function FloorPlan() {
     setShowLogos(next);
     const { error } = await supabase.from('events').update({ booth_show_logos: next }).eq('id', event.id);
     if (error) { console.error('show logos save error:', error); toast.error(t(lang, 'error')); }
+  };
+
+  const toggleNumbers = async () => {
+    const next = !showNumbers;
+    setShowNumbers(next);
+    const { error } = await supabase.from('events').update({ booth_show_numbers: next }).eq('id', event.id);
+    if (error) { console.error('show numbers save error:', error); toast.error(t(lang, 'error')); }
   };
 
   // Base display width = viewport width; zoom multiplies it.
@@ -409,11 +433,43 @@ export default function FloorPlan() {
                 onChange={(e) => saveBorderWidth(Number(e.target.value))}
                 style={{ width: '100%', accentColor: COLORS.primary, cursor: 'pointer' }}
               />
+              <span style={{ color: COLORS.dim, fontSize: 11 }}>
+                {de ? 'Gilt für Stände und Bühnen' : 'Applies to booths and stages'}
+              </span>
             </div>
             <label style={s.toggleRow}>
               <input type="checkbox" checked={showLogos} onChange={toggleLogos} />
               {de ? 'Logos anzeigen' : 'Show logos'}
             </label>
+            <label style={s.toggleRow}>
+              <input type="checkbox" checked={showNumbers} onChange={toggleNumbers} />
+              {de ? 'Nummern anzeigen' : 'Show numbers'}
+            </label>
+
+            {/* One frame colour per stage. Stages are colour-coded rather than
+                sharing the booth border colour, so each gets its own swatch. */}
+            {tracks.length > 0 && (
+              <div style={s.stageColorWrap}>
+                <span style={s.colorLabel}>{de ? 'Rahmenfarbe pro Bühne' : 'Frame colour per stage'}</span>
+                {tracks.map(tr => (
+                  <div key={tr.id} style={s.stageColorRow}>
+                    <input
+                      type="color"
+                      value={toHex(tr.color || STAGE_COLOR)}
+                      onChange={(e) => saveTrackColor(tr.id, e.target.value)}
+                      style={s.stageSwatch}
+                      title={tr.name}
+                    />
+                    <span style={s.stageColorName}>{tr.name}</span>
+                  </div>
+                ))}
+                <span style={{ color: COLORS.dim, fontSize: 11, maxWidth: 210, lineHeight: 1.4 }}>
+                  {de
+                    ? 'Diese Farbe ist auch die Farbe der Bühne im Programm.'
+                    : 'This is also the stage colour used in the programme.'}
+                </span>
+              </div>
+            )}
           </div>
         )}
 
@@ -434,7 +490,24 @@ export default function FloorPlan() {
                 onPointerDown={onPlanPointerDown}
               >
                 <img src={mapUrl} alt="Hallenplan" style={{ ...s.planImg, width: displayW, height: displayH }} draggable={false} onLoad={onImgLoad} />
-                {zones.map(z => {
+                {(() => {
+                  // Compute ONE number font size that fits every booth that shows a number,
+                  // then use it for all of them. Uniform for all + never clips.
+                  let sharedNumFs = 11 * zoom;
+                  zones.forEach(z => {
+                    if (z.track_id) return;
+                    const ex = exOf(z.exhibitor_id);
+                    const showNum = ex?.booth_number && (z.display_mode === 'number' || (z.display_mode == null && showNumbers));
+                    if (!showNum) return;
+                    const bw = (z.w / 100) * displayW;
+                    const bh = (z.h / 100) * displayH;
+                    const num = String(ex.booth_number);
+                    const byWidth = (bw * 0.92) / (num.length * 0.6);
+                    const byHeight = bh * 0.45;
+                    sharedNumFs = Math.min(sharedNumFs, byWidth, byHeight);
+                  });
+                  sharedNumFs = Math.max(3, sharedNumFs);
+                  return zones.map(z => {
                   const isStage = !!z.track_id;
                   const tr = isStage ? trackOf(z.track_id) : null;
                   const ex = !isStage ? exOf(z.exhibitor_id) : null;
@@ -447,38 +520,44 @@ export default function FloorPlan() {
                       style={{
                         ...s.zone,
                         left: z.x + '%', top: z.y + '%', width: z.w + '%', height: z.h + '%',
-                        borderWidth: (isSel || isPop) ? Math.max(borderWidth, 2) : Math.max(borderWidth, isStage ? 2 : borderWidth),
+                        // One width for booths and stages alike, straight from the
+                        // Randdicke slider, so the preview matches the app.
+                        borderWidth: (isSel || isPop) ? Math.max(borderWidth, 2) : borderWidth,
                         borderColor: (isSel || isPop) ? COLORS.primary : (isStage ? stageCol : colors.booth_border_color),
-                        background: isStage ? stageCol + '33' : colors.booth_fill_color,
+                        background: isStage ? stageCol + '22' : colors.booth_fill_color,
                       }}
                       onPointerDown={(e) => onZonePointerDown(e, z, 'move')}
                     >
-                      <div style={s.zoneBody}>
-                        {isStage ? (
-                          <span style={{ fontSize: 11, color: stageCol === '#ffffff' ? '#222' : stageCol, fontWeight: 800, textAlign: 'center', padding: '0 4px', pointerEvents: 'none', overflow: 'hidden', lineHeight: 1.15, maxWidth: '95%', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', textShadow: '0 1px 2px rgba(255,255,255,0.6)' }}>
+                      {isStage ? (
+                        /* The stage name is printed on the floor plan graphic
+                           itself, so the app does not draw it. Shown here only
+                           faintly, to identify the zone while arranging it. */
+                        <div style={s.zoneBody}>
+                          <span style={{ fontSize: 10, color: stageCol, fontWeight: 700, textAlign: 'center', padding: '0 4px', pointerEvents: 'none', overflow: 'hidden', lineHeight: 1.15, maxWidth: '95%', opacity: 0.75, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', textShadow: '0 1px 2px rgba(255,255,255,0.6)' }}>
                             {tr?.name || (de ? 'Bühne' : 'Stage')}
                           </span>
-                        ) : (() => {
-                          // effective mode: per-booth override (z.display_mode) wins; else global toggle
-                          const mode = z.display_mode || (showLogos ? 'logo' : 'number');
-                          if (mode === 'logo') {
-                            return ex?.logo_url
-                              ? <img src={ex.logo_url} alt="" style={s.zoneLogo} />
-                              : ex ? <span style={s.zoneName}>{ex.name}</span> : null;
-                          }
-                          // number mode
-                          if (ex?.booth_number) {
-                            const bw = (z.w / 100) * displayW;
-                            const bh = (z.h / 100) * displayH;
-                            const num = ex.booth_number;
-                            const byHeight = bh * 0.55;
-                            const byWidth = (bw * 1.5) / num.length;
-                            const fs = Math.max(7, Math.min(byHeight, byWidth));
-                            return <span style={{ fontWeight: 800, color: '#222', fontSize: fs, lineHeight: 1, whiteSpace: 'nowrap' }}>{num}</span>;
-                          }
-                          return ex ? <span style={s.zoneName}>{ex.name}</span> : null;
-                        })()}
-                      </div>
+                        </div>
+                      ) : (
+                        <>
+                          {/* Number header on top. Uses one shared size (fits the smallest
+                              booth) so all booths match and nothing clips. */}
+                          {ex?.booth_number && (z.display_mode === 'number' || (z.display_mode == null && showNumbers)) && (
+                            <div style={{ ...s.zoneNum, fontSize: sharedNumFs, color: '#1d1d1b', textShadow: '0 1px 2px rgba(255,255,255,0.7)' }}>
+                              {ex.booth_number}
+                            </div>
+                          )}
+                          {/* Body below the number: logo if present, else the name. */}
+                          <div style={s.zoneBody}>
+                            {(() => {
+                              const mode = z.display_mode || (showLogos ? 'logo' : 'number');
+                              if (mode === 'number') return null; // number-only booth: header already shows it
+                              return ex?.logo_url
+                                ? <img src={ex.logo_url} alt="" style={s.zoneLogo} />
+                                : ex ? <span style={s.zoneName}>{ex.name}</span> : null;
+                            })()}
+                          </div>
+                        </>
+                      )}
                       <button style={s.zoneDel} onClick={(e) => { e.stopPropagation(); deleteZone(z.id); }}>×</button>
                       {/* PowerPoint-style square handles on all 8 points, shown when selected. Each one resizes from its side/corner. */}
                       {(isSel || isPop) && [
@@ -503,7 +582,8 @@ export default function FloorPlan() {
 
                     </div>
                   );
-                })}
+                  });
+                })()}
 
                 {/* Single floating popup for the selected booth (rendered outside booth divs so booth handlers never interfere) */}
                 {popupZoneId && (() => {
@@ -651,6 +731,30 @@ export default function FloorPlan() {
                                 );
                               })}
                             </div>
+
+                            {/* Frame colour for the stage assigned to this zone. */}
+                            {z.track_id && (
+                              <div style={{ marginTop: 10 }}>
+                                <div style={{ color: COLORS.muted, fontSize: 11, fontWeight: 600, marginBottom: 6 }}>
+                                  {de ? 'Rahmenfarbe dieser Bühne' : 'Frame colour of this stage'}
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                                  <input
+                                    type="color"
+                                    value={toHex(trackOf(z.track_id)?.color || STAGE_COLOR)}
+                                    onChange={(e) => saveTrackColor(z.track_id, e.target.value)}
+                                    style={{ width: 44, height: 28, padding: 0, border: `1px solid ${COLORS.border}`, borderRadius: 6, background: 'none', cursor: 'pointer', flexShrink: 0 }}
+                                  />
+                                  {['#8c368c', '#e71f69', '#6bc8e8', '#cd80b4', '#7b8794', '#d4a017'].map(c => (
+                                    <button
+                                      key={c}
+                                      onClick={() => saveTrackColor(z.track_id, c)}
+                                      style={{ width: 24, height: 24, borderRadius: 5, cursor: 'pointer', background: c, border: (trackOf(z.track_id)?.color === c) ? `2px solid ${COLORS.text}` : `1px solid ${COLORS.border}` }}
+                                    />
+                                  ))}
+                                </div>
+                              </div>
+                            )}
                           </>
                         )}
                       </div>
@@ -676,10 +780,19 @@ export default function FloorPlan() {
                       ? <div style={{ width: 28, height: 28, borderRadius: 5, background: (tr?.color || STAGE_COLOR) + '33', border: `1px solid ${tr?.color || STAGE_COLOR}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14 }}>🎤</div>
                       : (ex?.logo_url ? <img src={ex.logo_url} alt="" style={s.miniLogo} /> : <div style={s.miniLogoFb} />)}
                     {isStage ? (
-                      <select style={s.select} value={z.track_id || ''} onChange={e => updateZoneTrack(z.id, e.target.value)} onFocus={() => setSelectedZone(z.id)}>
-                        <option value="">{de ? 'Bühne wählen' : 'Select stage'}</option>
-                        {tracks.map(tr => <option key={tr.id} value={tr.id}>{tr.name}</option>)}
-                      </select>
+                      <>
+                        <select style={s.select} value={z.track_id || ''} onChange={e => updateZoneTrack(z.id, e.target.value)} onFocus={() => setSelectedZone(z.id)}>
+                          <option value="">{de ? 'Bühne wählen' : 'Select stage'}</option>
+                          {tracks.map(tr => <option key={tr.id} value={tr.id}>{tr.name}</option>)}
+                        </select>
+                        <input
+                          type="color"
+                          value={toHex(tr?.color || STAGE_COLOR)}
+                          onChange={(e) => saveTrackColor(z.track_id, e.target.value)}
+                          title={de ? 'Rahmenfarbe' : 'Frame colour'}
+                          style={{ width: 34, height: 26, padding: 0, border: `1px solid ${COLORS.border}`, borderRadius: 5, background: 'none', cursor: 'pointer', flexShrink: 0 }}
+                        />
+                      </>
                     ) : (
                       <select style={s.select} value={z.exhibitor_id || ''} onChange={e => updateZoneExhibitor(z.id, e.target.value)} onFocus={() => setSelectedZone(z.id)}>
                         <option value="">{de ? 'Aussteller wählen' : 'Select exhibitor'}</option>
@@ -694,8 +807,8 @@ export default function FloorPlan() {
 
             <div style={s.hint}>
               {de
-                ? 'Zoome mit den Buttons oder Strg/⌘+Scrollen. Verschiebe den Plan, indem du eine leere Fläche ziehst. „Stand hinzufügen" für Aussteller, „Bühne hinzufügen" für eine Bühne. Box auf die Stelle ziehen → Ecke zum Anpassen → anklicken, um Aussteller oder Bühne zuzuweisen. Bühnen werden in der App antippbar und zeigen das Programm der Bühne.'
-                : 'Zoom with the buttons or Ctrl/⌘+scroll. Pan by dragging an empty area. "Add booth" for exhibitors, "Add stage" for a stage. Drag the box onto the spot → corner to resize → click to assign an exhibitor or a stage. Stages become tappable in the app and show the stage program.'}
+                ? 'Zoome mit den Buttons oder Strg/⌘+Scrollen. Verschiebe den Plan, indem du eine leere Fläche ziehst. „Stand hinzufügen" für Aussteller, „Bühne hinzufügen" für eine Bühne. Box auf die Stelle ziehen → Ecke zum Anpassen → anklicken, um Aussteller oder Bühne zuzuweisen. Bühnen werden in der App antippbar und zeigen das Programm der Bühne. Der Bühnenname wird in der App nicht gezeichnet, weil er bereits auf dem Hallenplan-Bild steht.'
+                : 'Zoom with the buttons or Ctrl/⌘+scroll. Pan by dragging an empty area. "Add booth" for exhibitors, "Add stage" for a stage. Drag the box onto the spot → corner to resize → click to assign an exhibitor or a stage. Stages become tappable in the app and show the stage program. The stage name is not drawn in the app, because it is already printed on the floor plan image.'}
             </div>
           </>
         ) : (
