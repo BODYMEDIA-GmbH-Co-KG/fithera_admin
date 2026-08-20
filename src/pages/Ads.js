@@ -7,9 +7,16 @@ import { Plus, Trash2, X, Upload, Image } from 'lucide-react';
 const COLORS = { primary: '#8c368c', accent: '#e71f69', bg: '#f4f2f6', surface: '#ffffff', border: '#e6e2ec', text: '#1d1d1b', muted: '#6b6b76', dim: '#9a9aa5' };
 const SUPABASE_URL = 'https://zdtfrqlqprtswnxniedq.supabase.co';
 
+// Recommended sizes must match how the app actually renders each placement,
+// otherwise an on-spec upload looks wrong.
+//   footer_banner: drawn full width with resizeMode "contain", so a mismatched
+//                  ratio leaves empty space above or below the image.
+//                  Current Sponsorenleiste is 1350 x 390.
+//   list_ad:       drawn full width minus 32px at 100px height with
+//                  resizeMode "cover", so a mismatched ratio gets cropped.
 const PLACEMENTS = [
-  { value: 'footer_banner', de: 'Footer Banner', en: 'Footer Banner', desc_de: 'Dauerhafter Banner am unteren Rand der App', desc_en: 'Permanent banner at the bottom of the app', size: '1200 x 240 px', ratio: '5:1' },
-  { value: 'list_ad', de: 'Listen-Anzeige', en: 'List Ad', desc_de: 'Rotierende Anzeige in Listen (Aussteller, Programm)', desc_en: 'Rotating ad inside lists (exhibitors, program)', size: '1200 x 300 px', ratio: '4:1' },
+  { value: 'footer_banner', de: 'Footer Banner', en: 'Footer Banner', desc_de: 'Dauerhafter Banner am unteren Rand der App', desc_en: 'Permanent banner at the bottom of the app', size: '1350 x 390 px', ratio: '3,5:1' },
+  { value: 'list_ad', de: 'Listen-Anzeige', en: 'List Ad', desc_de: 'Rotierende Anzeige in Listen (Aussteller, Programm)', desc_en: 'Rotating ad inside lists (exhibitors, program)', size: '1200 x 340 px', ratio: '3,5:1' },
 ];
 
 const empty = { title: '', image_url: '', link_url: '', exhibitor_id: '', placement: 'footer_banner', priority: 0, is_active: true };
