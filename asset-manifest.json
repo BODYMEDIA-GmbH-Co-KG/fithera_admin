@@ -1,10 +1,10 @@
 {
   "files": {
-    "main.js": "/fithera_admin/static/js/main.67e9dd04.js",
+    "main.js": "/fithera_admin/static/js/main.31e9d809.js",
     "index.html": "/fithera_admin/index.html",
-    "main.67e9dd04.js.map": "/fithera_admin/static/js/main.67e9dd04.js.map"
+    "main.31e9d809.js.map": "/fithera_admin/static/js/main.31e9d809.js.map"
   },
   "entrypoints": [
-    "static/js/main.67e9dd04.js"
+    "static/js/main.31e9d809.js"
   ]
 }
