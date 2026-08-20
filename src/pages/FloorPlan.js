@@ -29,6 +29,9 @@ const s = {
   zoneBody: { flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 0, padding: 2, overflow: 'hidden' },
   zoneLogo: { maxWidth: '90%', maxHeight: '100%', width: 'auto', height: 'auto', objectFit: 'contain', pointerEvents: 'none', display: 'block' },
   zoneName: { fontSize: 10, color: '#222', fontWeight: 700, textAlign: 'center', padding: '0 4px', pointerEvents: 'none', overflow: 'hidden',lineHeight: 1.1, maxWidth: '95%',display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' },
+  // Small marker shown in the admin preview only, so a booth set to "Nichts"
+  // is still identifiable while arranging the plan. It is never drawn in the app.
+  zoneBlankHint: { fontSize: 9, color: COLORS.primary, fontWeight: 700, opacity: 0.65, pointerEvents: 'none', textShadow: '0 1px 2px rgba(255,255,255,0.8)' },
   numBadge: { position: 'absolute', top: 0, left: 0, fontWeight: 800, color: '#fff', background: 'rgba(0,0,0,0.55)', borderRadius: 2, padding: '0px 2px', lineHeight: 1.1, whiteSpace: 'nowrap', pointerEvents: 'none', zIndex: 10, fontVariantNumeric: 'tabular-nums', boxSizing: 'border-box' },
   handle: { position: 'absolute', right: -8, bottom: -8, width: 28, height: 28, background: 'transparent', cursor: 'nwse-resize', zIndex: 50, touchAction: 'none' },
   handleHint: { position: 'absolute', right: -4, bottom: -4, width: 8, height: 8, borderRight: `3px solid ${COLORS.primary}`, borderBottom: `3px solid ${COLORS.primary}`, pointerEvents: 'none' },
@@ -55,6 +58,9 @@ const s = {
   boothPopClose: { background: 'none', border: 'none', color: COLORS.muted, cursor: 'pointer', fontSize: 18, lineHeight: 1, padding: 0 },
   modeTabs: { display: 'flex', gap: 6, marginBottom: 10 },
   modeTab: (active) => ({ flex: 1, padding: '7px 4px', borderRadius: 7, cursor: 'pointer', fontSize: 13, fontWeight: 600, border: active ? `1px solid ${COLORS.primary}` : `1px solid ${COLORS.border}`, background: active ? COLORS.primary : COLORS.bg, color: active ? '#fff' : COLORS.muted }),
+  // Four options now fit in one row, so the buttons are a little tighter.
+  displayTab: (active) => ({ flex: 1, minWidth: 0, padding: '6px 2px', borderRadius: 6, cursor: 'pointer', fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap', border: active ? `1px solid ${COLORS.primary}` : `1px solid ${COLORS.border}`, background: active ? COLORS.primary : COLORS.bg, color: active ? '#fff' : COLORS.muted }),
+  displayHint: { color: COLORS.dim, fontSize: 11, marginTop: 6, lineHeight: 1.4 },
 };
 
 const DEFAULTS = {
@@ -254,7 +260,12 @@ export default function FloorPlan() {
   };
 
   const updateZoneDisplayMode = async (zoneId, mode) => {
-    // mode: 'logo' | 'number' | null (null = follow global toggle)
+    // mode: 'logo' | 'number' | 'none' | null
+    //   null    follow the global "Logos anzeigen" / "Nummern anzeigen" toggles
+    //   'logo'  logo only
+    //   'number' booth number only
+    //   'none'  frame and fill as usual, but nothing inside. The zone stays
+    //           tappable in the app, so the exhibitor or stage still opens.
     setZones(z => z.map(zz => zz.id === zoneId ? { ...zz, display_mode: mode } : zz));
     const { error } = await supabase.from('floor_plan_booths').update({ display_mode: mode }).eq('id', zoneId);
     if (error) { console.error('display mode save error:', error); toast.error(t(lang, 'error')); }
@@ -399,6 +410,30 @@ export default function FloorPlan() {
     );
   };
 
+  // Display mode selector, shared by the booth and stage tabs of the popup.
+  // `options` differs: a stage has no logo or number to show, so it only offers
+  // Standard and Nichts.
+  const DisplayModeSelector = ({ zone, options, label, hint }) => (
+    <div style={{ marginTop: 10 }}>
+      <div style={{ color: COLORS.muted, fontSize: 11, fontWeight: 600, marginBottom: 6 }}>{label}</div>
+      <div style={{ display: 'flex', gap: 6 }}>
+        {options.map(opt => {
+          const active = (zone.display_mode || null) === opt.val;
+          return (
+            <button
+              key={String(opt.val)}
+              onClick={() => updateZoneDisplayMode(zone.id, opt.val)}
+              style={s.displayTab(active)}
+            >
+              {opt.label}
+            </button>
+          );
+        })}
+      </div>
+      {hint ? <div style={s.displayHint}>{hint}</div> : null}
+    </div>
+  );
+
   return (
     <div style={s.page}>
       <div style={s.header}>
@@ -514,6 +549,7 @@ export default function FloorPlan() {
                   const isSel = selectedZone === z.id;
                   const isPop = popupZoneId === z.id;
                   const stageCol = tr?.color || STAGE_COLOR;
+                  const isBlank = z.display_mode === 'none';
                   return (
                     <div
                       key={z.id}
@@ -531,11 +567,14 @@ export default function FloorPlan() {
                       {isStage ? (
                         /* The stage name is printed on the floor plan graphic
                            itself, so the app does not draw it. Shown here only
-                           faintly, to identify the zone while arranging it. */
+                           faintly, to identify the zone while arranging it.
+                           A stage set to "Nichts" hides even this hint. */
                         <div style={s.zoneBody}>
-                          <span style={{ fontSize: 10, color: stageCol, fontWeight: 700, textAlign: 'center', padding: '0 4px', pointerEvents: 'none', overflow: 'hidden', lineHeight: 1.15, maxWidth: '95%', opacity: 0.75, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', textShadow: '0 1px 2px rgba(255,255,255,0.6)' }}>
-                            {tr?.name || (de ? 'Bühne' : 'Stage')}
-                          </span>
+                          {!isBlank && (
+                            <span style={{ fontSize: 10, color: stageCol, fontWeight: 700, textAlign: 'center', padding: '0 4px', pointerEvents: 'none', overflow: 'hidden', lineHeight: 1.15, maxWidth: '95%', opacity: 0.75, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', textShadow: '0 1px 2px rgba(255,255,255,0.6)' }}>
+                              {tr?.name || (de ? 'Bühne' : 'Stage')}
+                            </span>
+                          )}
                         </div>
                       ) : (
                         <>
@@ -550,7 +589,13 @@ export default function FloorPlan() {
                           <div style={s.zoneBody}>
                             {(() => {
                               const mode = z.display_mode || (showLogos ? 'logo' : 'number');
-                              if (mode === 'number') return null; // number-only booth: header already shows it
+                              // Number-only booth: the header already shows it.
+                              if (mode === 'number') return null;
+                              // "Nichts": nothing is drawn in the app. Here a tiny
+                              // marker keeps the booth identifiable while arranging.
+                              if (mode === 'none') {
+                                return <span style={s.zoneBlankHint}>{de ? 'leer' : 'blank'}</span>;
+                              }
                               return ex?.logo_url
                                 ? <img src={ex.logo_url} alt="" style={s.zoneLogo} />
                                 : ex ? <span style={s.zoneName}>{ex.name}</span> : null;
@@ -576,10 +621,6 @@ export default function FloorPlan() {
                           onPointerDown={(e) => onZonePointerDown(e, z, hd.dir)}
                         />
                       ))}
-
-
-
-
                     </div>
                   );
                   });
@@ -668,33 +709,20 @@ export default function FloorPlan() {
                                   );
                                 })}
                             </div>
-                            <div style={{ marginTop: 10 }}>
-                              <div style={{ color: COLORS.muted, fontSize: 11, fontWeight: 600, marginBottom: 6 }}>{de ? 'Anzeige auf diesem Stand' : 'Show on this booth'}</div>
-                              <div style={{ display: 'flex', gap: 6 }}>
-                                {[
-                                  { val: null, label: de ? 'Standard' : 'Default' },
-                                  { val: 'logo', label: 'Logo' },
-                                  { val: 'number', label: de ? 'Nummer' : 'Number' },
-                                ].map(opt => {
-                                  const active = (z.display_mode || null) === opt.val;
-                                  return (
-                                    <button
-                                      key={String(opt.val)}
-                                      onClick={() => updateZoneDisplayMode(z.id, opt.val)}
-                                      style={{
-                                        flex: 1, padding: '6px 4px', borderRadius: 6, cursor: 'pointer',
-                                        fontSize: 12, fontWeight: 600,
-                                        border: active ? `1px solid ${COLORS.primary}` : `1px solid ${COLORS.border}`,
-                                        background: active ? COLORS.primary : COLORS.bg,
-                                        color: active ? '#fff' : COLORS.muted,
-                                      }}
-                                    >
-                                      {opt.label}
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                            </div>
+
+                            <DisplayModeSelector
+                              zone={z}
+                              label={de ? 'Anzeige auf diesem Stand' : 'Show on this booth'}
+                              options={[
+                                { val: null, label: de ? 'Standard' : 'Default' },
+                                { val: 'logo', label: 'Logo' },
+                                { val: 'number', label: de ? 'Nummer' : 'Number' },
+                                { val: 'none', label: de ? 'Nichts' : 'None' },
+                              ]}
+                              hint={de
+                                ? 'Nichts: Rahmen bleibt sichtbar und antippbar, aber ohne Logo und Nummer.'
+                                : 'None: the frame stays visible and tappable, but without logo or number.'}
+                            />
                           </>
                         ) : (
                           <>
@@ -731,6 +759,23 @@ export default function FloorPlan() {
                                 );
                               })}
                             </div>
+
+                            {/* A stage never draws a logo or a number, so it only
+                                needs Standard vs Nichts. Nichts also hides the
+                                faint name shown in this preview. */}
+                            {z.track_id && (
+                              <DisplayModeSelector
+                                zone={z}
+                                label={de ? 'Anzeige auf dieser Bühne' : 'Show on this stage'}
+                                options={[
+                                  { val: null, label: de ? 'Standard' : 'Default' },
+                                  { val: 'none', label: de ? 'Nichts' : 'None' },
+                                ]}
+                                hint={de
+                                  ? 'Der Bühnenname steht schon auf dem Hallenplan-Bild und wird in der App nie gezeichnet.'
+                                  : 'The stage name is already on the floor plan image and is never drawn in the app.'}
+                              />
+                            )}
 
                             {/* Frame colour for the stage assigned to this zone. */}
                             {z.track_id && (
@@ -799,6 +844,12 @@ export default function FloorPlan() {
                         {exhibitors.map(ex => <option key={ex.id} value={ex.id}>{ex.booth_number ? `${ex.name} (${ex.booth_number})` : ex.name}</option>)}
                       </select>
                     )}
+                    {/* Quick indicator so a booth set to "Nichts" is obvious in the list. */}
+                    {z.display_mode === 'none' && (
+                      <span style={{ color: COLORS.dim, fontSize: 11, fontWeight: 600, flexShrink: 0 }}>
+                        {de ? 'leer' : 'blank'}
+                      </span>
+                    )}
                     <button style={{ width: 22, height: 22, borderRadius: 6, background: '#2a2a3e', color: COLORS.muted, border: 'none', cursor: 'pointer' }} onClick={() => deleteZone(z.id)}>×</button>
                   </div>
                 );
@@ -807,8 +858,8 @@ export default function FloorPlan() {
 
             <div style={s.hint}>
               {de
-                ? 'Zoome mit den Buttons oder Strg/⌘+Scrollen. Verschiebe den Plan, indem du eine leere Fläche ziehst. „Stand hinzufügen" für Aussteller, „Bühne hinzufügen" für eine Bühne. Box auf die Stelle ziehen → Ecke zum Anpassen → anklicken, um Aussteller oder Bühne zuzuweisen. Bühnen werden in der App antippbar und zeigen das Programm der Bühne. Der Bühnenname wird in der App nicht gezeichnet, weil er bereits auf dem Hallenplan-Bild steht.'
-                : 'Zoom with the buttons or Ctrl/⌘+scroll. Pan by dragging an empty area. "Add booth" for exhibitors, "Add stage" for a stage. Drag the box onto the spot → corner to resize → click to assign an exhibitor or a stage. Stages become tappable in the app and show the stage program. The stage name is not drawn in the app, because it is already printed on the floor plan image.'}
+                ? 'Zoome mit den Buttons oder Strg/⌘+Scrollen. Verschiebe den Plan, indem du eine leere Fläche ziehst. „Stand hinzufügen" für Aussteller, „Bühne hinzufügen" für eine Bühne. Box auf die Stelle ziehen → Ecke zum Anpassen → anklicken, um Aussteller oder Bühne zuzuweisen. Mit „Nichts" bleibt der Rahmen sichtbar und antippbar, aber Logo und Nummer werden ausgeblendet. Bühnen werden in der App antippbar und zeigen das Programm der Bühne. Der Bühnenname wird in der App nicht gezeichnet, weil er bereits auf dem Hallenplan-Bild steht.'
+                : 'Zoom with the buttons or Ctrl/⌘+scroll. Pan by dragging an empty area. "Add booth" for exhibitors, "Add stage" for a stage. Drag the box onto the spot → corner to resize → click to assign an exhibitor or a stage. With "None" the frame stays visible and tappable, but logo and number are hidden. Stages become tappable in the app and show the stage program. The stage name is not drawn in the app, because it is already printed on the floor plan image.'}
             </div>
           </>
         ) : (
