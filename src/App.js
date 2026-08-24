@@ -31,6 +31,14 @@ const COLORS = {
   muted: '#6b6b76',
   dim: '#9a9aa5',
 };
+
+// Aussteller melden sich mit denselben Zugangsdaten im Lead Scanner der App an.
+// Ohne diese Pruefung kaemen sie damit auch ins Admin-Panel und saehen dort
+// alle Aussteller-, Kontakt- und Programmdaten. Die Rolle steht in
+// app_metadata und kann vom Nutzer selbst nicht geaendert werden.
+const isAdminSession = (session) =>
+  session?.user?.app_metadata?.role === 'admin';
+
 export default function App() {
   const [session, setSession] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -57,7 +65,7 @@ export default function App() {
     });
   }, []);
   useEffect(() => {
-    if (!session) return;
+    if (!isAdminSession(session)) return;
     supabase.from('events').select('*').eq('is_active', true).order('start_date', { ascending: false }).limit(1)
       .then(({ data }) => {
         if (data?.[0]) setEvent(data[0]);
@@ -72,8 +80,21 @@ export default function App() {
     e.preventDefault();
     setLoginLoading(true);
     setLoginError('');
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) setLoginError(lang === 'de' ? 'Falsche E-Mail oder Passwort' : 'Invalid email or password');
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) {
+      setLoginError(lang === 'de' ? 'Falsche E-Mail oder Passwort' : 'Invalid email or password');
+      setLoginLoading(false);
+      return;
+    }
+    // Gueltige Zugangsdaten, aber kein Admin: sofort wieder abmelden.
+    if (data.user?.app_metadata?.role !== 'admin') {
+      await supabase.auth.signOut();
+      setLoginError(lang === 'de'
+        ? 'Dieser Zugang gilt nur fuer den Lead Scanner in der App.'
+        : 'These credentials are only valid for the Lead Scanner in the app.');
+      setLoginLoading(false);
+      return;
+    }
     setLoginLoading(false);
   };
   const handleSetPassword = async (e) => {
@@ -137,7 +158,9 @@ export default function App() {
       </div>
     </div>
   );
-  if (!session) return (
+  // Auch eine bereits bestehende Sitzung wird geprueft, nicht nur der Login:
+  // ein Aussteller koennte sonst mit einem alten Token direkt hier landen.
+  if (!isAdminSession(session)) return (
     <div style={{ background: COLORS.bg, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'system-ui, sans-serif' }}>
       <Toaster />
       <div style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: 16, padding: 40, width: 380 }}>
