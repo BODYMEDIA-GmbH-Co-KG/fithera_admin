@@ -64,8 +64,13 @@ const s = {
   speakerRow: { display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderRadius: 8, cursor: 'pointer', marginBottom: 4 },
   speakerAvatar: { width: 30, height: 30, borderRadius: 15, objectFit: 'cover', background: COLORS.bg },
   speakerAvatarFb: { width: 30, height: 30, borderRadius: 15, background: COLORS.primary + '33', color: COLORS.primary, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700 },
+  // Aussteller-Logos sind meist quadratisch oder breit, deshalb eckig statt rund.
+  exhibitorLogo: { width: 30, height: 30, borderRadius: 6, objectFit: 'contain', background: '#fff', border: `1px solid ${COLORS.border}` },
+  exhibitorLogoFb: { width: 30, height: 30, borderRadius: 6, background: COLORS.bg, border: `1px solid ${COLORS.border}`, color: COLORS.muted, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700 },
+  boothTag: { fontSize: 11, fontWeight: 600, color: COLORS.dim, fontVariantNumeric: 'tabular-nums', flexShrink: 0 },
   searchBox: { display: 'flex', alignItems: 'center', gap: 8, background: COLORS.bg, border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: '7px 10px', marginBottom: 6 },
   searchInput: { flex: 1, background: 'transparent', border: 'none', outline: 'none', color: COLORS.text, fontSize: 14 },
+  hint: { color: COLORS.dim, fontSize: 12, marginTop: 6, lineHeight: 1.4 },
 };
 
 const empty = { title: '', description: '', track_id: '', session_type: '', start_time: '', end_time: '', location: '', is_featured: false };
@@ -78,25 +83,43 @@ export default function Program() {
   const [tracks, setTracks] = useState([]);
   const [speakers, setSpeakers] = useState([]);
   const [sessionSpeakers, setSessionSpeakers] = useState([]);
+  // Aussteller, die an einer Session beteiligt sind. Gedacht vor allem fuer
+  // Walking Pitches und Innovation Pitches, wo eine Session mehrere Firmen
+  // buendelt. Funktioniert aber bei jeder Session.
+  const [exhibitors, setExhibitors] = useState([]);
+  const [sessionExhibitors, setSessionExhibitors] = useState([]);
   const [modal, setModal] = useState(false);
   const [form, setForm] = useState(empty);
   const [selectedSpeakers, setSelectedSpeakers] = useState([]);
   const [speakerSearch, setSpeakerSearch] = useState('');
+  const [selectedExhibitors, setSelectedExhibitors] = useState([]);
+  const [exhibitorSearch, setExhibitorSearch] = useState('');
   const [editing, setEditing] = useState(null);
   const [saving, setSaving] = useState(false);
 
   const load = async () => {
     if (!event) return;
-    const [{ data: sessionsData }, { data: tracksData }, { data: speakersData }, { data: linksData }] = await Promise.all([
+    const [
+      { data: sessionsData },
+      { data: tracksData },
+      { data: speakersData },
+      { data: linksData },
+      { data: exhibitorsData },
+      { data: exLinksData },
+    ] = await Promise.all([
       supabase.from('sessions').select('*').eq('event_id', event.id).order('start_time'),
       supabase.from('tracks').select('id, name'),
       supabase.from('speakers').select('id, name, photo_url, role, company').eq('event_id', event.id).order('name'),
       supabase.from('session_speakers').select('session_id, speaker_id'),
+      supabase.from('exhibitors').select('id, name, booth_number, logo_url').eq('event_id', event.id).order('name'),
+      supabase.from('session_exhibitor_links').select('session_id, exhibitor_id, sort_order'),
     ]);
     setItems(sessionsData || []);
     setTracks(tracksData || []);
     setSpeakers(speakersData || []);
     setSessionSpeakers(linksData || []);
+    setExhibitors(exhibitorsData || []);
+    setSessionExhibitors(exLinksData || []);
   };
   useEffect(() => { load(); }, [event]);
 
@@ -105,7 +128,18 @@ export default function Program() {
   const speakerName = (id) => speakers.find(sp => sp.id === id)?.name || '';
   const speakersForSession = (sessionId) => sessionSpeakers.filter(l => l.session_id === sessionId).map(l => l.speaker_id);
 
-  const openAdd = () => { setForm(empty); setSelectedSpeakers([]); setSpeakerSearch(''); setEditing(null); setModal(true); };
+  const exhibitorName = (id) => exhibitors.find(ex => ex.id === id)?.name || '';
+  const exhibitorsForSession = (sessionId) => sessionExhibitors
+    .filter(l => l.session_id === sessionId)
+    .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))
+    .map(l => l.exhibitor_id);
+
+  const openAdd = () => {
+    setForm(empty);
+    setSelectedSpeakers([]); setSpeakerSearch('');
+    setSelectedExhibitors([]); setExhibitorSearch('');
+    setEditing(null); setModal(true);
+  };
   const openEdit = (item) => {
     setForm({
       title: item.title || '',
@@ -119,6 +153,8 @@ export default function Program() {
     });
     setSelectedSpeakers(speakersForSession(item.id));
     setSpeakerSearch('');
+    setSelectedExhibitors(exhibitorsForSession(item.id));
+    setExhibitorSearch('');
     setEditing(item.id);
     setModal(true);
   };
@@ -127,11 +163,21 @@ export default function Program() {
     setSelectedSpeakers(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
   };
 
+  // Die Reihenfolge der Auswahl ist die Reihenfolge in der App, deshalb wird
+  // angehaengt statt sortiert.
+  const toggleExhibitor = (id) => {
+    setSelectedExhibitors(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  };
+
   // Speakers shown in the picker: selected ones always shown on top,
   // the rest filtered by the search term.
   const q = speakerSearch.trim().toLowerCase();
   const matches = (sp) => !q || [sp.name, sp.role, sp.company].filter(Boolean).some(v => v.toLowerCase().includes(q));
   const visibleSpeakers = speakers.filter(sp => selectedSpeakers.includes(sp.id) || matches(sp));
+
+  const eq = exhibitorSearch.trim().toLowerCase();
+  const exMatches = (ex) => !eq || [ex.name, ex.booth_number].filter(Boolean).some(v => String(v).toLowerCase().includes(eq));
+  const visibleExhibitors = exhibitors.filter(ex => selectedExhibitors.includes(ex.id) || exMatches(ex));
 
   const handleSave = async () => {
     if (!form.title.trim()) { toast.error(de ? 'Titel ist erforderlich' : 'Title is required'); return; }
@@ -166,6 +212,18 @@ export default function Program() {
         const rows = selectedSpeakers.map(sid => ({ session_id: sessionId, speaker_id: sid }));
         await supabase.from('session_speakers').insert(rows);
       }
+
+      // sort_order haelt die Reihenfolge fest, in der die Firmen ausgewaehlt
+      // wurden. Bei "Walking Pitches 1-3" ist das die Reihenfolge der Pitches.
+      await supabase.from('session_exhibitor_links').delete().eq('session_id', sessionId);
+      if (selectedExhibitors.length > 0) {
+        const rows = selectedExhibitors.map((eid, i) => ({
+          session_id: sessionId,
+          exhibitor_id: eid,
+          sort_order: i,
+        }));
+        await supabase.from('session_exhibitor_links').insert(rows);
+      }
     }
 
     toast.success(t(lang, 'saved'));
@@ -197,12 +255,14 @@ export default function Program() {
       )}
       {items.map(item => {
         const spIds = speakersForSession(item.id);
+        const exIds = exhibitorsForSession(item.id);
         return (
           <div key={item.id} style={s.card}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div style={{ flex: 1 }}>
                 <div style={{ color: COLORS.text, fontWeight: 600, fontSize: 15, marginBottom: 4 }}>{item.title}</div>
                 {spIds.length > 0 && <div style={{ color: COLORS.muted, fontSize: 13, marginBottom: 6 }}>👤 {spIds.map(speakerName).filter(Boolean).join(', ')}</div>}
+                {exIds.length > 0 && <div style={{ color: COLORS.muted, fontSize: 13, marginBottom: 6 }}>🏢 {exIds.map(exhibitorName).filter(Boolean).join(', ')}</div>}
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 4 }}>
                   {item.track_id && <span style={s.badge(COLORS.primary)}>{trackName(item.track_id)}</span>}
                   {item.session_type && <span style={s.badge('#3b82f6')}>{item.session_type}</span>}
@@ -262,6 +322,53 @@ export default function Program() {
                         </div>
                       );
                     })}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Aussteller an dieser Session. Fuer Walking Pitches und
+                Innovation Pitches, wo eine Session mehrere Firmen buendelt.
+                Die Reihenfolge der Auswahl ist auch die Reihenfolge in der App. */}
+            <div style={s.field}>
+              <label style={s.label}>{de ? 'Beteiligte Aussteller' : 'Participating exhibitors'} {selectedExhibitors.length > 0 && `(${selectedExhibitors.length})`}</label>
+              {exhibitors.length === 0 ? (
+                <div style={{ color: COLORS.dim, fontSize: 13, padding: '8px 0' }}>
+                  {de ? 'Noch keine Aussteller vorhanden.' : 'No exhibitors yet.'}
+                </div>
+              ) : (
+                <div>
+                  <div style={s.searchBox}>
+                    <Search size={15} color={COLORS.dim} />
+                    <input style={s.searchInput} value={exhibitorSearch} onChange={e => setExhibitorSearch(e.target.value)}
+                      placeholder={de ? 'Aussteller oder Stand suchen…' : 'Search exhibitor or booth…'} />
+                    {exhibitorSearch && <button onClick={() => setExhibitorSearch('')} style={{ background: 'none', border: 'none', color: COLORS.dim, cursor: 'pointer' }}><X size={14} /></button>}
+                  </div>
+                  <div style={{ maxHeight: 200, overflowY: 'auto', border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: 6 }}>
+                    {visibleExhibitors.length === 0 && (
+                      <div style={{ color: COLORS.dim, fontSize: 13, padding: '8px 10px' }}>{de ? 'Keine Treffer.' : 'No matches.'}</div>
+                    )}
+                    {visibleExhibitors.map(ex => {
+                      const checked = selectedExhibitors.includes(ex.id);
+                      const pos = selectedExhibitors.indexOf(ex.id);
+                      return (
+                        <div key={ex.id} style={{ ...s.speakerRow, background: checked ? COLORS.primary + '22' : 'transparent' }} onClick={() => toggleExhibitor(ex.id)}>
+                          <input type="checkbox" checked={checked} readOnly />
+                          {ex.logo_url ? <img src={ex.logo_url} alt="" style={s.exhibitorLogo} /> : <div style={s.exhibitorLogoFb}>{(ex.name || '?')[0]}</div>}
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ color: COLORS.text, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {checked ? `${pos + 1}. ` : ''}{ex.name}
+                            </div>
+                          </div>
+                          {ex.booth_number && <span style={s.boothTag}>{ex.booth_number}</span>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div style={s.hint}>
+                    {de
+                      ? 'Die Nummerierung zeigt die Reihenfolge, in der die Aussteller in der App erscheinen. Abwählen und neu anklicken ändert sie.'
+                      : 'The numbering shows the order they appear in the app. Deselect and pick again to change it.'}
                   </div>
                 </div>
               )}

@@ -12,11 +12,12 @@ const SUPABASE_URL = 'https://zdtfrqlqprtswnxniedq.supabase.co';
 //   footer_banner: drawn full width with resizeMode "contain", so a mismatched
 //                  ratio leaves empty space above or below the image.
 //                  Current Sponsorenleiste is 1350 x 390.
-//   list_ad:       drawn full width minus 32px at 100px height with
-//                  resizeMode "cover", so a mismatched ratio gets cropped.
+//   list_ad:       Medium Rectangle, dasselbe Format wie auf der BODYMEDIA
+//                  Website. Dadurch lassen sich vorhandene Banner ohne neues
+//                  Design weiterverwenden.
 const PLACEMENTS = [
   { value: 'footer_banner', de: 'Footer Banner', en: 'Footer Banner', desc_de: 'Dauerhafter Banner am unteren Rand der App', desc_en: 'Permanent banner at the bottom of the app', size: '1350 x 390 px', ratio: '3,5:1' },
-  { value: 'list_ad', de: 'Listen-Anzeige', en: 'List Ad', desc_de: 'Rotierende Anzeige in Listen (Aussteller, Programm)', desc_en: 'Rotating ad inside lists (exhibitors, program)', size: '1200 x 340 px', ratio: '3,5:1' },
+  { value: 'list_ad', de: 'Listen-Anzeige', en: 'List Ad', desc_de: 'Medium Rectangle in Listen (Aussteller, Programm)', desc_en: 'Medium Rectangle inside lists (exhibitors, program)', size: '300 x 250 px', ratio: '6:5' },
 ];
 
 const empty = { title: '', image_url: '', link_url: '', exhibitor_id: '', placement: 'footer_banner', priority: 0, is_active: true };
