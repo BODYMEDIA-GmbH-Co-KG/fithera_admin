@@ -215,14 +215,41 @@ export default function Program() {
 
       // sort_order haelt die Reihenfolge fest, in der die Firmen ausgewaehlt
       // wurden. Bei "Walking Pitches 1-3" ist das die Reihenfolge der Pitches.
-      await supabase.from('session_exhibitor_links').delete().eq('session_id', sessionId);
+      //
+      // Fehler werden hier ausdruecklich geprueft und angezeigt. Vorher wurde
+      // das Ergebnis ignoriert, dadurch meldete die Oberflaeche "gespeichert",
+      // auch wenn die Datenbank die Zeilen abgelehnt hatte.
+      const { error: delErr } = await supabase
+        .from('session_exhibitor_links').delete().eq('session_id', sessionId);
+      if (delErr) {
+        console.error('exhibitor link delete error:', delErr);
+        toast.error('Aussteller: ' + (delErr.message || 'Löschen fehlgeschlagen'));
+        setSaving(false);
+        return;
+      }
+
       if (selectedExhibitors.length > 0) {
         const rows = selectedExhibitors.map((eid, i) => ({
           session_id: sessionId,
           exhibitor_id: eid,
           sort_order: i,
         }));
-        await supabase.from('session_exhibitor_links').insert(rows);
+        const { data: inserted, error: insErr } = await supabase
+          .from('session_exhibitor_links').insert(rows).select();
+        if (insErr) {
+          console.error('exhibitor link insert error:', insErr);
+          toast.error('Aussteller: ' + (insErr.message || 'Speichern fehlgeschlagen'));
+          setSaving(false);
+          return;
+        }
+        // Bei aktiver Zeilenschutz-Regel ohne Leserecht kommt kein Fehler,
+        // aber auch keine Zeile zurueck. Das faellt sonst nicht auf.
+        if (!inserted || inserted.length !== rows.length) {
+          console.error('exhibitor link insert returned', inserted);
+          toast.error(`Aussteller: nur ${inserted ? inserted.length : 0} von ${rows.length} gespeichert`);
+          setSaving(false);
+          return;
+        }
       }
     }
 
