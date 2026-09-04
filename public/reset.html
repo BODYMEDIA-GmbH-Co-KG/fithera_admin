@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex" />
+<title>Passwort vergessen · fithera Lead Scanner</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --primary: #8c368c;
+    --accent:  #e71f69;
+    --ink:     #1d1d1b;
+    --muted:   #6b6b76;
+    --line:    #e6e2ec;
+    --field:   #f7f5f9;
+    --ok:      #059669;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    background: #f4f2f6;
+    font-family: 'Work Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    color: var(--ink);
+  }
+  .card {
+    width: 100%;
+    max-width: 400px;
+    background: #fff;
+    border-radius: 14px;
+    overflow: hidden;
+    box-shadow: 0 4px 24px rgba(29,29,27,0.10);
+  }
+  .topline { height: 5px; background: var(--primary); }
+  .inner { padding: 26px 26px 30px; }
+
+  .brandrow { display: flex; align-items: center; gap: 10px; margin-bottom: 26px; }
+  .mark {
+    width: 34px; height: 34px; border-radius: 9px;
+    background: var(--primary); color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 17px; font-weight: 600;
+  }
+  .bname { font-size: 16px; font-weight: 600; line-height: 1.2; }
+  .bsub  { font-size: 12px; color: var(--muted); line-height: 1.3; }
+
+  h1 { font-size: 20px; font-weight: 600; margin: 0 0 8px; }
+  p.lead { font-size: 14px; line-height: 1.6; color: var(--muted); margin: 0 0 22px; }
+
+  label { display: block; font-size: 13px; font-weight: 500; margin-bottom: 6px; }
+  input {
+    width: 100%;
+    padding: 12px 14px;
+    font-size: 16px;
+    font-family: inherit;
+    color: var(--ink);
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    background: var(--field);
+    outline: none;
+  }
+  input:focus { border-color: var(--primary); background: #fff; }
+  input::placeholder { color: #aaa5b3; }
+  .field { margin-bottom: 16px; }
+  .pwwrap { position: relative; }
+  .pwwrap input { padding-right: 46px; }
+  .eye {
+    position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+    width: 36px; height: 36px;
+    border: 0; background: none; cursor: pointer; padding: 0;
+    color: var(--muted); font-size: 13px; font-weight: 500;
+    font-family: inherit;
+  }
+  .eye:hover { color: var(--primary); }
+
+  button.main {
+    width: 100%;
+    padding: 13px;
+    font-size: 15px;
+    font-weight: 600;
+    font-family: inherit;
+    color: #fff;
+    background: var(--primary);
+    border: 0;
+    border-radius: 9px;
+    cursor: pointer;
+  }
+  button.main:hover { background: #762c76; }
+  button.main:disabled { background: #c4bccb; cursor: default; }
+
+  .rule {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 13px; color: var(--muted);
+    margin: -8px 0 16px;
+  }
+  .rule.met { color: var(--ok); }
+  .rule .dot {
+    width: 15px; height: 15px; border-radius: 50%;
+    border: 1.5px solid currentColor;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px; line-height: 1; flex: none;
+  }
+
+  .msg { font-size: 14px; line-height: 1.5; padding: 12px 14px; border-radius: 9px; margin-bottom: 18px; }
+  .msg.err { background: #fdf0f3; color: #9c1f3d; }
+  .msg.ok  { background: #edf7f2; color: #17624a; }
+
+  .help {
+    display: flex; gap: 9px;
+    margin-top: 22px; padding-top: 18px;
+    border-top: 1px solid var(--line);
+    font-size: 13px; line-height: 1.5; color: var(--muted);
+  }
+  .help a { color: var(--primary); }
+  .help .ic { flex: none; font-size: 15px; line-height: 1.4; }
+
+  .doneMark {
+    width: 46px; height: 46px; border-radius: 50%;
+    background: #edf7f2; color: var(--ok);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 24px; margin-bottom: 16px;
+  }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="topline"></div>
+  <div class="inner">
+
+    <div class="brandrow">
+      <div class="mark">f</div>
+      <div>
+        <div class="bname">fithera</div>
+        <div class="bsub">Lead Scanner</div>
+      </div>
+    </div>
+
+    <div id="box-loading">
+      <p class="lead">Einen Moment…</p>
+    </div>
+
+    <div id="box-request" class="hidden">
+      <h1>Passwort vergessen?</h1>
+      <p class="lead">
+        Trag deine E-Mail ein. Du bekommst einen Link, mit dem du dir ein neues
+        Passwort setzen kannst.
+      </p>
+      <div id="request-msg"></div>
+      <div class="field">
+        <label for="email">Deine E-Mail-Adresse</label>
+        <input id="email" type="email" autocomplete="email" placeholder="aussteller@firma.de" />
+      </div>
+      <button class="main" id="request-btn">Link schicken</button>
+      <div class="help">
+        <span class="ic">?</span>
+        <span>Keine Mail bekommen? Schau im Spam-Ordner nach oder schreib an
+          <a href="mailto:info@fithera.de">info@fithera.de</a>.</span>
+      </div>
+    </div>
+
+    <div id="box-set" class="hidden">
+      <h1>Neues Passwort wählen</h1>
+      <p class="lead">Damit meldest du dich danach in der App an.</p>
+      <div id="set-msg"></div>
+      <div class="field">
+        <label for="pw1">Neues Passwort</label>
+        <div class="pwwrap">
+          <input id="pw1" type="password" autocomplete="new-password" />
+          <button class="eye" id="eye" type="button" aria-label="Passwort anzeigen">zeigen</button>
+        </div>
+      </div>
+      <div class="rule" id="rule"><span class="dot"></span> Mindestens 8 Zeichen</div>
+      <div class="field">
+        <label for="pw2">Noch einmal zur Sicherheit</label>
+        <input id="pw2" type="password" autocomplete="new-password" />
+      </div>
+      <button class="main" id="set-btn">Passwort speichern</button>
+    </div>
+
+    <div id="box-done" class="hidden">
+      <div class="doneMark">✓</div>
+      <h1>Fertig</h1>
+      <p class="lead">
+        Öffne die fithera App, tippe auf „Lead Scanner“ und melde dich mit
+        deinem neuen Passwort an.
+      </p>
+    </div>
+
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+(function () {
+  var SUPABASE_URL = 'https://zdtfrqlqprtswnxniedq.supabase.co';
+  var SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpkdGZycWxxcHJ0c3dueG5pZWRxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwMzk1NjEsImV4cCI6MjA5NTYxNTU2MX0.QYgvrXspW7jDFXxbG2ung6bjosARFh7Z2zuUVPZXWYE';
+
+  // detectSessionInUrl loest den Token aus dem Link in eine kurzlebige
+  // Sitzung auf. Nur damit darf das Passwort geaendert werden.
+  var sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON, {
+    auth: { detectSessionInUrl: true, persistSession: false, flowType: 'implicit' }
+  });
+
+  var $ = function (id) { return document.getElementById(id); };
+  function show(id) {
+    ['box-loading','box-request','box-set','box-done'].forEach(function (b) {
+      $(b).classList.toggle('hidden', b !== id);
+    });
+  }
+  function msg(t, text, kind) {
+    $(t).innerHTML = text ? '<div class="msg ' + kind + '">' + text + '</div>' : '';
+  }
+
+  var redirectTo = window.location.origin + window.location.pathname;
+
+  $('eye').addEventListener('click', function () {
+    var f = $('pw1');
+    var hidden = f.type === 'password';
+    f.type = hidden ? 'text' : 'password';
+    this.textContent = hidden ? 'verbergen' : 'zeigen';
+  });
+
+  $('pw1').addEventListener('input', function () {
+    var ok = this.value.length >= 8;
+    $('rule').classList.toggle('met', ok);
+    $('rule').querySelector('.dot').textContent = ok ? '✓' : '';
+  });
+
+  $('request-btn').addEventListener('click', async function () {
+    var email = $('email').value.trim().toLowerCase();
+    if (!email || email.indexOf('@') === -1) {
+      msg('request-msg', 'Bitte gib eine gültige E-Mail-Adresse ein.', 'err');
+      return;
+    }
+    this.disabled = true; this.textContent = 'Wird gesendet…';
+    var res = await sb.auth.resetPasswordForEmail(email, { redirectTo: redirectTo });
+    this.disabled = false; this.textContent = 'Link schicken';
+    // Absichtlich immer dieselbe Antwort, sonst laesst sich hier durchprobieren,
+    // welche Adressen einen Zugang haben.
+    if (res.error) console.log('reset request error:', res.error.message);
+    msg('request-msg',
+      'Wenn zu dieser Adresse ein Zugang besteht, ist die E-Mail unterwegs.', 'ok');
+  });
+
+  $('set-btn').addEventListener('click', async function () {
+    var a = $('pw1').value, b = $('pw2').value;
+    if (a.length < 8) { msg('set-msg', 'Das Passwort braucht mindestens 8 Zeichen.', 'err'); return; }
+    if (a !== b)      { msg('set-msg', 'Die beiden Passwörter stimmen nicht überein.', 'err'); return; }
+    this.disabled = true; this.textContent = 'Wird gespeichert…';
+    var res = await sb.auth.updateUser({ password: a });
+    if (res.error) {
+      this.disabled = false; this.textContent = 'Passwort speichern';
+      msg('set-msg', 'Das hat nicht geklappt: ' + res.error.message, 'err');
+      return;
+    }
+    await sb.auth.signOut();
+    show('box-done');
+  });
+
+  var settled = false;
+  function settle(hasSession) {
+    if (settled) return;
+    settled = true;
+    // Token aus der Adresszeile nehmen, damit er nicht im Verlauf steht.
+    if (window.history.replaceState) {
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+    show(hasSession ? 'box-set' : 'box-request');
+  }
+
+  sb.auth.onAuthStateChange(function (event, session) {
+    if (event === 'PASSWORD_RECOVERY' || session) settle(true);
+  });
+
+  var hasToken = window.location.hash.indexOf('access_token') !== -1;
+  setTimeout(async function () {
+    var got = await sb.auth.getSession();
+    settle(!!(got.data && got.data.session));
+  }, hasToken ? 1200 : 150);
+})();
+</script>
+</body>
+</html>
