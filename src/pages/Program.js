@@ -75,6 +75,24 @@ const s = {
 
 const empty = { title: '', description: '', track_id: '', session_type: '', start_time: '', end_time: '', location: '', is_featured: false };
 
+// Sortiert nach Startzeit, und bei gleicher Startzeit nach Titel.
+//
+// Ohne den zweiten Schluessel liefert die Datenbank die Reihenfolge, in der
+// die Zeilen zufaellig liegen. Bei den Walking Pitches, die alle um dieselbe
+// Uhrzeit beginnen, stand deshalb 2 vor 3 vor 1.
+//
+// numeric sorgt dafuer, dass "Walking Pitches 10" nach 9 kommt und nicht
+// zwischen 1 und 2.
+function sortSessions(list) {
+  const collator = new Intl.Collator('de', { numeric: true, sensitivity: 'base' });
+  return [...list].sort((a, b) => {
+    const ta = a.start_time ? new Date(a.start_time).getTime() : Infinity;
+    const tb = b.start_time ? new Date(b.start_time).getTime() : Infinity;
+    if (ta !== tb) return ta - tb;
+    return collator.compare(a.title || '', b.title || '');
+  });
+}
+
 export default function Program() {
   const lang = useContext(LangContext);
   const event = useContext(EventContext);
@@ -114,7 +132,7 @@ export default function Program() {
       supabase.from('exhibitors').select('id, name, booth_number, logo_url').eq('event_id', event.id).order('name'),
       supabase.from('session_exhibitor_links').select('session_id, exhibitor_id, sort_order'),
     ]);
-    setItems(sessionsData || []);
+    setItems(sortSessions(sessionsData || []));
     setTracks(tracksData || []);
     setSpeakers(speakersData || []);
     setSessionSpeakers(linksData || []);
