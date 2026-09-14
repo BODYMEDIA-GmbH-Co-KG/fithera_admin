@@ -20,6 +20,19 @@ const PLACEMENTS = [
   { value: 'list_ad', de: 'Listen-Anzeige', en: 'List Ad', desc_de: 'Medium Rectangle in Listen (Aussteller, Programm)', desc_en: 'Medium Rectangle inside lists (exhibitors, program)', size: '300 x 250 px', ratio: '6:5' },
 ];
 
+// Ziele innerhalb der App. Eine Anzeige kann damit auf einen Bildschirm
+// verweisen statt auf eine Webseite. Die Werte muessen zu APP_SCREENS in
+// components/AdBanner.js der App passen.
+const APP_TARGETS = [
+  { value: 'app://sponsoren', de: 'Sponsoren', en: 'Sponsors' },
+  { value: 'app://programm', de: 'Programm', en: 'Program' },
+  { value: 'app://aussteller', de: 'Aussteller', en: 'Exhibitors' },
+  { value: 'app://hallenplan', de: 'Hallenplan', en: 'Floor plan' },
+  { value: 'app://speaker', de: 'Speaker', en: 'Speakers' },
+];
+
+const isAppTarget = (url) => APP_TARGETS.some(t => t.value === (url || '').trim().toLowerCase());
+
 const empty = { title: '', image_url: '', link_url: '', exhibitor_id: '', placement: 'footer_banner', priority: 0, is_active: true };
 
 export default function Ads() {
@@ -215,10 +228,27 @@ export default function Ads() {
               </select>
             </div>
             {!form.exhibitor_id && (
-              <div style={s.field}>
-                <label style={s.label}>{de ? 'Oder externe URL' : 'Or external URL'}</label>
-                <input style={s.input} placeholder="https://" value={form.link_url} onChange={e => setForm(f => ({ ...f, link_url: e.target.value }))} />
-              </div>
+              <>
+                <div style={s.field}>
+                  <label style={s.label}>{de ? 'Oder Bereich in der App' : 'Or screen in the app'}</label>
+                  <select
+                    style={s.select}
+                    value={isAppTarget(form.link_url) ? form.link_url.trim().toLowerCase() : ''}
+                    onChange={e => setForm(f => ({ ...f, link_url: e.target.value }))}
+                  >
+                    <option value="">{de ? 'Kein Bereich' : 'No screen'}</option>
+                    {APP_TARGETS.map(tgt => (
+                      <option key={tgt.value} value={tgt.value}>{de ? tgt.de : tgt.en}</option>
+                    ))}
+                  </select>
+                </div>
+                {!isAppTarget(form.link_url) && (
+                  <div style={s.field}>
+                    <label style={s.label}>{de ? 'Oder externe URL' : 'Or external URL'}</label>
+                    <input style={s.input} placeholder="https://" value={form.link_url} onChange={e => setForm(f => ({ ...f, link_url: e.target.value }))} />
+                  </div>
+                )}
+              </>
             )}
             <div style={s.row}>
               <div style={{ flex: 1, ...s.field }}>
