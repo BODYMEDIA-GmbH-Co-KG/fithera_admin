@@ -50,18 +50,43 @@ export default function Statistik() {
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
 
+  // Supabase liefert pro Anfrage hoechstens 1000 Zeilen, unabhaengig davon,
+  // was in limit() steht. Vorher kamen deshalb immer nur die neuesten 1000
+  // Ereignisse an, und die Zahl der Geraete sank mit jedem weiteren Ereignis,
+  // weil der sichtbare Ausschnitt immer kuerzer wurde.
+  //
+  // Deshalb hier seitenweise laden, bis nichts mehr kommt.
+  const PAGE = 1000;
+  const MAX_PAGES = 200; // Sicherheitsnetz, entspricht 200.000 Ereignissen
+
   const load = async () => {
     if (!event) return;
     setLoading(true);
     setError('');
-    const { data, error } = await supabase
-      .from('analytics_events')
-      .select('event_type, target_id, target_name, device_id, created_at')
-      .eq('event_id', event.id)
-      .order('created_at', { ascending: false })
-      .limit(50000);
-    if (error) setError(error.message);
-    setEvents(data || []);
+
+    const all = [];
+    let page = 0;
+    let failed = '';
+
+    while (page < MAX_PAGES) {
+      const from = page * PAGE;
+      const { data, error } = await supabase
+        .from('analytics_events')
+        .select('event_type, target_id, target_name, device_id, created_at')
+        .eq('event_id', event.id)
+        .order('created_at', { ascending: false })
+        .range(from, from + PAGE - 1);
+
+      if (error) { failed = error.message; break; }
+      if (!data || data.length === 0) break;
+
+      all.push(...data);
+      if (data.length < PAGE) break; // letzte Seite
+      page += 1;
+    }
+
+    if (failed) setError(failed);
+    setEvents(all);
     setLoading(false);
   };
 
