@@ -1,4 +1,4 @@
-import { useState, useEffect, useContext, useMemo } from 'react';
+import { useState, useEffect, useContext, useMemo, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { EventContext } from '../App';
 import {
@@ -51,42 +51,61 @@ export default function Statistik() {
   const [customTo, setCustomTo] = useState('');
 
   // Supabase liefert pro Anfrage hoechstens 1000 Zeilen, unabhaengig davon,
-  // was in limit() steht. Vorher kamen deshalb immer nur die neuesten 1000
-  // Ereignisse an, und die Zahl der Geraete sank mit jedem weiteren Ereignis,
-  // weil der sichtbare Ausschnitt immer kuerzer wurde.
+  // was in limit() steht. Es muss also seitenweise geladen werden.
   //
-  // Deshalb hier seitenweise laden, bis nichts mehr kommt.
+  // WICHTIG: keine Offset-Paginierung mit .range(). Waehrend des Events wird
+  // laufend in die Tabelle geschrieben. Bei .order('created_at', desc) landen
+  // neue Zeilen oben, alles rutscht nach hinten, und Seite 2 liefert Zeilen,
+  // die schon in Seite 1 waren. Das erzeugt Duplikate, deren Anzahl bei jedem
+  // Reload anders ist. Genau daher kamen die springenden und sinkenden Zahlen.
+  //
+  // Stattdessen Keyset-Paginierung ueber die id (bigint, monoton steigend).
+  // Jede Seite macht dort weiter, wo die vorherige aufgehoert hat. Neue
+  // Einfuegungen verschieben nichts, weil sie immer groessere ids bekommen.
   const PAGE = 1000;
   const MAX_PAGES = 200; // Sicherheitsnetz, entspricht 200.000 Ereignissen
 
+  // Guard gegen parallele Ladevorgaenge: klickt jemand zweimal auf
+  // Aktualisieren, darf das langsamere aeltere Ergebnis das neuere nicht
+  // ueberschreiben.
+  const loadToken = useRef(0);
+
   const load = async () => {
     if (!event) return;
+    const myToken = ++loadToken.current;
+
     setLoading(true);
     setError('');
 
-    const all = [];
-    let page = 0;
+    const byId = new Map(); // id -> Zeile, dedupliziert als zusaetzliches Netz
+    let lastId = 0;
+    let pages = 0;
     let failed = '';
 
-    while (page < MAX_PAGES) {
-      const from = page * PAGE;
+    while (pages < MAX_PAGES) {
       const { data, error } = await supabase
         .from('analytics_events')
-        .select('event_type, target_id, target_name, device_id, created_at')
+        .select('id, event_type, target_id, target_name, device_id, created_at')
         .eq('event_id', event.id)
-        .order('created_at', { ascending: false })
-        .range(from, from + PAGE - 1);
+        .gt('id', lastId)
+        .order('id', { ascending: true })
+        .limit(PAGE);
 
       if (error) { failed = error.message; break; }
       if (!data || data.length === 0) break;
 
-      all.push(...data);
+      data.forEach(row => byId.set(row.id, row));
+      lastId = data[data.length - 1].id;
+
       if (data.length < PAGE) break; // letzte Seite
-      page += 1;
+      pages += 1;
     }
 
+    // Ergebnis eines veralteten Ladevorgangs verwerfen
+    if (myToken !== loadToken.current) return;
+
     if (failed) setError(failed);
-    setEvents(all);
+    setEvents(Array.from(byId.values()));
     setLoading(false);
   };
 
@@ -120,38 +139,86 @@ export default function Statistik() {
   }, [events, range, customFrom, customTo]);
 
   // ---- Aggregations (auf gefilterten Daten) ----
-  const countByType = {};
-  const uniqueDevices = new Set();
-  const byTypeTarget = {}; // type -> { target_id: { name, count } }
-  const byDay = {};        // 'YYYY-MM-DD' -> count
+  // Lokales Datum statt der ersten 10 Zeichen des ISO-Strings. Der ISO-String
+  // ist UTC, dadurch fielen Ereignisse zwischen 00:00 und 02:00 MESZ auf den
+  // Vortag.
+  const localDay = (iso) => {
+    const d = new Date(iso);
+    if (isNaN(d)) return '';
+    const p = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+  };
 
-  const appOpenDevices = new Set(); // unique devices that opened the app
-  const devicesByDay = {}; // 'YYYY-MM-DD' -> Set of device_ids that opened the app that day
+  const agg = useMemo(() => {
+    const countByType = {};
+    const uniqueDevices = new Set();
+    const byTypeTarget = {}; // type -> key -> { name, count, devices:Set }
+    const byDay = {};
+    const appOpenDevices = new Set();
+    const devicesByDay = {};
 
-  filteredEvents.forEach(e => {
-    countByType[e.event_type] = (countByType[e.event_type] || 0) + 1;
-    if (e.device_id) uniqueDevices.add(e.device_id);
-    if (e.event_type === 'app_open' && e.device_id) appOpenDevices.add(e.device_id);
-    if (!byTypeTarget[e.event_type]) byTypeTarget[e.event_type] = {};
-    const key = e.target_id || e.target_name;
-    if (key) {
-      const slot = byTypeTarget[e.event_type][key] || { name: e.target_name || '-', count: 0 };
-      slot.count += 1;
-      byTypeTarget[e.event_type][key] = slot;
-    }
-    const day = (e.created_at || '').slice(0, 10);
-    if (day) {
-      byDay[day] = (byDay[day] || 0) + 1;
-      if (e.event_type === 'app_open' && e.device_id) {
-        if (!devicesByDay[day]) devicesByDay[day] = new Set();
-        devicesByDay[day].add(e.device_id);
+    filteredEvents.forEach(e => {
+      countByType[e.event_type] = (countByType[e.event_type] || 0) + 1;
+      if (e.device_id) uniqueDevices.add(e.device_id);
+      if (e.event_type === 'app_open' && e.device_id) appOpenDevices.add(e.device_id);
+
+      if (!byTypeTarget[e.event_type]) byTypeTarget[e.event_type] = {};
+      const key = e.target_id || e.target_name;
+      if (key) {
+        const slot = byTypeTarget[e.event_type][key]
+          || { name: e.target_name || '-', count: 0, devices: new Set() };
+        slot.count += 1;
+        if (e.device_id) slot.devices.add(e.device_id);
+        byTypeTarget[e.event_type][key] = slot;
       }
-    }
-  });
 
+      const day = localDay(e.created_at);
+      if (day) {
+        byDay[day] = (byDay[day] || 0) + 1;
+        if (e.event_type === 'app_open' && e.device_id) {
+          if (!devicesByDay[day]) devicesByDay[day] = new Set();
+          devicesByDay[day].add(e.device_id);
+        }
+      }
+    });
+
+    return { countByType, uniqueDevices, byTypeTarget, byDay, appOpenDevices, devicesByDay };
+  }, [filteredEvents]);
+
+  const { countByType, byTypeTarget, byDay, appOpenDevices, devicesByDay } = agg;
+
+  // Sortierung: erst nach Personen, dann nach Taps, dann nach Name.
+  // Der Name am Ende ist der entscheidende Tiebreaker. Ohne ihn hatten alle
+  // Eintraege mit demselben Wert bei jedem Reload eine andere Reihenfolge.
   const topList = (type, n = null) => {
-    const sorted = Object.values(byTypeTarget[type] || {}).sort((a, b) => b.count - a.count);
+    const sorted = Object.values(byTypeTarget[type] || {})
+      .map(r => ({ name: r.name, count: r.count, people: r.devices.size }))
+      .sort((a, b) =>
+        b.people - a.people ||
+        b.count - a.count ||
+        a.name.localeCompare(b.name, 'de')
+      );
     return n ? sorted.slice(0, n) : sorted;
+  };
+
+  // program_filter mischt drei Dimensionen: Tagesumschalter, Buehnen und
+  // Session-Typen. Als eine Rangliste dargestellt dominiert der Tageswechsel
+  // alles andere, weil er beim Blaettern staendig ausgeloest wird.
+  const FILTER_GROUPS = [
+    { key: 'tag', title: 'Programm-Filter: Tag', test: (n) => /^Tag\s/i.test(n) },
+    { key: 'buehne', title: 'Programm-Filter: Bühnen', test: (n) => /stage|bühne|buehne/i.test(n) },
+    { key: 'typ', title: 'Programm-Filter: Session-Typen', test: () => true },
+  ];
+
+  const programFilterGroups = () => {
+    const rows = topList('program_filter');
+    return FILTER_GROUPS.map(g => ({
+      ...g,
+      rows: rows.filter(r => {
+        const hit = FILTER_GROUPS.find(x => x.test(r.name));
+        return hit && hit.key === g.key;
+      }),
+    })).filter(g => g.rows.length > 0);
   };
 
   const days = Object.keys(byDay).sort();
@@ -238,7 +305,7 @@ export default function Statistik() {
       const rows = topList(type);
       if (rows.length === 0) return;
       L.push(title.toUpperCase() + ' (' + rows.length + ')');
-      rows.forEach((r, i) => L.push((i + 1) + '. ' + r.name + ' - ' + r.count));
+      rows.forEach((r, i) => L.push((i + 1) + '. ' + r.name + ' - ' + (r.people ?? r.count) + ' Personen, ' + r.count + ' Aufrufe'));
       L.push('');
     };
     section('Aussteller-Aufrufe', 'exhibitor_view');
@@ -432,9 +499,9 @@ export default function Statistik() {
           {topList('exhibitors_filter').length > 0 && (
             <TopBlock title="Meistgenutzte Aussteller-Filter" rows={topList('exhibitors_filter')} color={COLORS.primary} />
           )}
-          {topList('program_filter').length > 0 && (
-            <TopBlock title="Meistgenutzte Programm-Filter (Bühnen)" rows={topList('program_filter')} color={COLORS.accent} />
-          )}
+          {programFilterGroups().map(g => (
+            <TopBlock key={g.key} title={g.title} rows={g.rows} color={COLORS.accent} />
+          ))}
 
           <div style={{ color: COLORS.dim, fontSize: 12, marginTop: 16 }}>
             Insgesamt {filteredEvents.length} erfasste Aktionen{range !== 'all' ? ` (${rangeLabel()})` : ''}.
@@ -445,21 +512,26 @@ export default function Statistik() {
   );
 }
 
+// Der Balken zeigt Personen, nicht Taps. Rohe Taps lassen einzelne
+// Vielnutzer eine Rangliste bestimmen: bei map_booth_tap kamen 125 Taps von
+// nur 16 Geraeten. Die Tap-Zahl steht weiterhin klein daneben.
 function TopBlock({ title, rows, color }) {
-  const max = Math.max(1, ...rows.map(r => r.count));
   if (rows.length === 0) return null;
+  const max = Math.max(1, ...rows.map(r => r.people ?? r.count));
   return (
     <div style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: 20, marginBottom: 20 }}>
-      <div style={{ color: COLORS.text, fontSize: 16, fontWeight: 700, marginBottom: 16 }}>{title} <span style={{ color: COLORS.dim, fontWeight: 400, fontSize: 13 }}>({rows.length})</span></div>
+      <div style={{ color: COLORS.text, fontSize: 16, fontWeight: 700, marginBottom: 4 }}>{title} <span style={{ color: COLORS.dim, fontWeight: 400, fontSize: 13 }}>({rows.length})</span></div>
+      <div style={{ color: COLORS.dim, fontSize: 12, marginBottom: 16 }}>Sortiert nach Personen. Zweite Zahl = Aufrufe insgesamt.</div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 420, overflowY: 'auto' }}>
         {rows.map((r, i) => (
-          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div key={`${r.name}-${i}`} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <div style={{ width: 28, color: COLORS.dim, fontSize: 13, flexShrink: 0 }}>{i + 1}.</div>
             <div style={{ width: 200, color: COLORS.text, fontSize: 14, flexShrink: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.name}</div>
             <div style={{ flex: 1, background: COLORS.bg, borderRadius: 6, height: 18, overflow: 'hidden' }}>
-              <div style={{ width: `${(r.count / max) * 100}%`, height: '100%', background: color, borderRadius: 6 }} />
+              <div style={{ width: `${((r.people ?? r.count) / max) * 100}%`, height: '100%', background: color, borderRadius: 6 }} />
             </div>
-            <div style={{ width: 44, textAlign: 'right', color: COLORS.text, fontSize: 14, fontWeight: 600 }}>{r.count}</div>
+            <div style={{ width: 44, textAlign: 'right', color: COLORS.text, fontSize: 14, fontWeight: 600 }}>{r.people ?? r.count}</div>
+            <div style={{ width: 52, textAlign: 'right', color: COLORS.dim, fontSize: 12 }}>{r.count} Auf.</div>
           </div>
         ))}
       </div>
